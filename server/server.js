@@ -45,10 +45,10 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'pantalla-sucursal.html'));
+  res.sendFile(path.join(__dirname, 'public', 'pantalla-sucursal.html'));
 });
 
 // Si se define HUB_API_KEY, las escrituras (POST/PATCH) requieren el
