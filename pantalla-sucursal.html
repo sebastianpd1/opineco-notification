@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Centro de Alertas — Sucursal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --deep:   #17134F;
+    --purple: #7A22C9;
+    --pink:   #F0299D;
+    --red:    #FF3B30;
+    --white:  #F6F3FF;
+    --dim:    rgba(246,243,255,0.62);
+    --panel:  rgba(255,255,255,0.07);
+    --panel-line: rgba(255,255,255,0.14);
+    --discord: #5865F2;
+    --tawk: #22C35E;
+    --mail1: #7FC7FB;
+    --mail2: #1E7FE0;
+    --ml: #FFE600;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Inter',sans-serif;
+    background:
+      radial-gradient(circle at 85% 8%, rgba(240,41,157,0.30), transparent 45%),
+      linear-gradient(135deg, var(--deep) 0%, #3A1C8C 45%, var(--purple) 100%);
+    color:var(--white);
+    min-height:100vh;
+    padding:40px 24px;
+    overflow-x:hidden;
+  }
+
+  .page{
+    max-width:1560px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+  }
+
+  /* ---------- HEADER ---------- */
+  .header{
+    display:flex;
+    align-items:center;
+    gap:24px;
+  }
+  .header > div:first-child{flex:1 1 0; min-width:0;}
+  .sucursal-name{
+    font-family:'Sora',sans-serif;
+    font-weight:700;
+    font-size:clamp(22px,2.4vw,32px);
+  }
+  .sucursal-tag{
+    margin-top:4px;
+    font-size:14px;
+    color:var(--dim);
+  }
+  .icon-row{
+    display:flex;
+    gap:18px;
+    margin-top:26px;
+    flex-wrap:wrap;
+  }
+  .app-icon{position:relative; width:54px;}
+  .app-icon .tile{
+    width:54px; height:54px;
+    border-radius:14px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 16px rgba(0,0,0,0.25);
+  }
+  .app-icon svg{width:28px;height:28px;}
+  .badge-count{
+    position:absolute; top:-6px; right:-6px;
+    min-width:20px; height:20px; padding:0 5px;
+    border-radius:10px; background:var(--red);
+    border:2px solid var(--deep);
+    font-size:11px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .app-icon .label{
+    display:block; margin-top:6px; font-size:10px;
+    text-align:center; color:var(--dim);
+  }
+
+  .acuse-widget{
+    display:flex; align-items:center; gap:10px;
+    height:54px;
+    background:rgba(34,195,94,0.14);
+    border:1px solid rgba(34,195,94,0.4);
+    border-radius:14px;
+    padding:0 16px 0 8px;
+  }
+  .acuse-check{
+    width:38px; height:38px; border-radius:10px; flex-shrink:0;
+    background:var(--tawk);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .acuse-check svg{width:20px; height:20px;}
+  .acuse-text{
+    font-family:'Sora',sans-serif; font-weight:700; font-size:12px;
+    color:var(--tawk); white-space:nowrap;
+  }
+
+  .ml-header-wide{
+    margin-top:18px;
+    width:100%;
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:14px;
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    gap:16px;
+    backdrop-filter:blur(6px);
+  }
+  .ml-header-wide .app-icon{flex-shrink:0;}
+  .ml-header-title{
+    font-family:'Sora',sans-serif; font-weight:600; font-size:13px;
+    flex-shrink:0; padding-right:16px; border-right:1px solid var(--panel-line);
+    line-height:1.3;
+  }
+  .ml-header-title b{display:block; color:var(--ml); font-size:14px;}
+  .ml-header-track-wrap{flex:1; min-width:0; overflow:hidden;}
+  .ml-header-track{
+    display:inline-flex; gap:36px; white-space:nowrap;
+    animation:mlScroll 20s linear infinite;
+    font-size:13px;
+  }
+  .ml-header-track b{color:var(--ml);}
+
+  .cal-block{
+    display:flex; flex-direction:column; align-items:flex-end; text-align:right;
+    margin-left:auto;
+    flex:1 1 0; min-width:0;
+  }
+  .date-day{font-family:'Sora',sans-serif; font-weight:700; font-size:clamp(18px,1.8vw,24px);}
+  .date-full{font-size:13px; color:var(--dim); margin-top:2px;}
+
+  .mini-cal{
+    margin-top:12px;
+    width:320px;
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:14px;
+    padding:14px 16px;
+    backdrop-filter:blur(6px);
+  }
+  .mini-cal-head{
+    font-size:11px; color:var(--dim); text-align:left; margin-bottom:8px;
+  }
+  .mini-cal-row{display:flex; gap:6px;}
+  .mini-cal-row .d{
+    flex:1; text-align:center; font-size:10px; color:var(--dim);
+  }
+  .mini-cal-row .d .num{
+    margin-top:4px; width:28px; height:28px; line-height:28px;
+    border-radius:8px; font-family:'Sora',sans-serif; font-weight:600;
+    font-size:13px; margin-inline:auto;
+  }
+  .mini-cal-row .d.today .num{background:var(--pink);}
+  .mini-cal-events{margin-top:10px; text-align:left; display:flex; flex-direction:column; gap:6px;}
+  .mini-cal-event{
+    font-size:11px; color:var(--white);
+    display:flex; align-items:center; gap:6px;
+  }
+  .mini-cal-event .dot{width:6px;height:6px;border-radius:50%; flex-shrink:0;}
+
+  .cal-native{
+    margin-top:12px;
+    width:100%;
+    background:#2d1f5e;
+    border-radius:12px;
+    padding:10px;
+    border:1px solid var(--panel-line);
+    box-shadow:0 10px 26px rgba(0,0,0,0.25);
+  }
+  .cal-native-title{
+    font-size:10px; font-weight:600; color:#fff;
+    text-transform:uppercase; letter-spacing:.06em;
+    text-align:left; margin-bottom:8px;
+  }
+  .cal-scroll{
+    overflow-x:auto;
+    scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,0.25) transparent;
+  }
+  .cal-scroll::-webkit-scrollbar{height:6px;}
+  .cal-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.25); border-radius:3px;}
+  .seven-days{border-collapse:separate; border-spacing:4px; table-layout:fixed;}
+  .day-box{
+    background:#3d2d7a; border-radius:8px; padding:8px 6px;
+    height:88px; width:90px; vertical-align:top; border:1px solid transparent;
+  }
+  .day-box.today{border-color:#a78bfa;}
+  .day-name{font-size:9px; color:#fff; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; text-align:left;}
+  .day-num{font-size:16px; font-weight:600; color:#fff; margin-bottom:5px; text-align:left; line-height:1;}
+  .day-box.today .day-num{color:#a78bfa;}
+  .ev-block{
+    display:block; border-radius:5px; padding:4px 5px;
+    font-size:9px; font-weight:600; line-height:1.2;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    background:#eab308; color:#3d2d10;
+  }
+
+  /* ---------- ALERTS: full width, escalonadas, límite 3, luego marquee ---------- */
+  .alerts-zone{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .alert-bar{
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--red);
+    color:#fff;
+    padding:12px 16px;
+    border-radius:10px;
+    font-size:14px;
+    font-weight:700;
+    box-shadow:0 8px 20px rgba(255,59,48,0.35);
+    cursor:pointer;
+    touch-action:pan-y;
+    user-select:none;
+  }
+  .alert-dot{width:8px;height:8px;border-radius:50%; background:#fff; flex-shrink:0;}
+  .alert-text{flex:1; min-width:0;}
+
+  .marquee-bar{
+    width:100%;
+    display:flex; align-items:center;
+    height:46px;
+    background:var(--red);
+    border-radius:10px;
+    box-shadow:0 8px 20px rgba(255,59,48,0.35);
+    overflow:hidden;
+    cursor:pointer;
+    touch-action:pan-y;
+    user-select:none;
+  }
+  .marquee-track-wrap{flex:1; min-width:0; overflow:hidden;}
+  .marquee-track{
+    display:inline-block; white-space:nowrap; padding-left:100%;
+    font-size:14px; font-weight:700; color:#fff;
+    animation:marqueeMove 18s linear infinite;
+  }
+  @keyframes marqueeMove{0%{transform:translateX(0);} 100%{transform:translateX(-100%);}}
+
+  /* ---------- MAIN GRID: 3 panels ---------- */
+  .main{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:16px;
+    padding:18px 20px;
+    height:340px;
+    display:flex;
+    flex-direction:column;
+    backdrop-filter:blur(6px);
+  }
+  .panel-head{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .panel-head svg{width:20px;height:20px; flex-shrink:0;}
+  .panel-title{font-family:'Sora',sans-serif; font-weight:600; font-size:15px;}
+  .panel-count{margin-left:auto; font-size:12px; color:var(--dim);}
+
+  .ticker-wrap{
+    flex:1; overflow:hidden;
+    mask-image:linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
+    -webkit-mask-image:linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
+  }
+  .ticker{display:flex; flex-direction:column; gap:10px; animation:scrollUp 14s linear infinite;}
+  .ticker-wrap.slow .ticker{animation-duration:18s;}
+  .ticker-wrap.notif .ticker{animation-duration:16s;}
+  @keyframes scrollUp{0%{transform:translateY(0);} 100%{transform:translateY(-50%);}}
+
+  .order-card{background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09); border-radius:10px; padding:10px 12px;}
+  #despacharTicker .order-card{cursor:pointer;}
+  .order-id{font-family:'Sora',sans-serif; font-size:13px; font-weight:600; color:var(--pink);}
+  .order-who{font-size:14px; font-weight:600; margin-top:2px;}
+  .order-detail{font-size:12px; color:var(--dim); margin-top:2px;}
+
+  .notif-card{background:rgba(255,255,255,0.05); border-left:3px solid var(--pink); border-radius:8px; padding:10px 12px;}
+  .notif-from{font-size:12px; font-weight:600; color:var(--pink);}
+  .notif-text{font-size:13px; margin-top:3px; line-height:1.35;}
+  .notif-time{font-size:10px; color:var(--dim); margin-top:4px;}
+
+  /* ---------- MERCADOLIBRE: ancho completo, abajo ---------- */
+  .ml-wide{
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:16px;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    gap:20px;
+    backdrop-filter:blur(6px);
+    height:88px;
+  }
+  .ml-wide .app-icon{flex-shrink:0;}
+  .ml-wide-title{
+    font-family:'Sora',sans-serif; font-weight:600; font-size:14px;
+    flex-shrink:0; padding-right:20px; border-right:1px solid var(--panel-line);
+  }
+  .ml-track-wrap{flex:1; overflow:hidden;}
+  .ml-track{
+    display:inline-flex; gap:48px; white-space:nowrap;
+    animation:mlScroll 22s linear infinite;
+  }
+  .ml-item{font-size:14px; color:var(--white);}
+  .ml-item b{color:var(--ml);}
+  @keyframes mlScroll{0%{transform:translateX(0);} 100%{transform:translateX(-50%);}}
+
+  /* ---------- demo controls ---------- */
+  .demo-controls{
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; color:rgba(246,243,255,0.5);
+  }
+  .demo-controls button{
+    font-size:11px; padding:6px 12px; border-radius:8px;
+    border:1px solid var(--panel-line); background:var(--panel);
+    color:var(--white); cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <div class="sucursal-name" id="sucursalName">—</div>
+      <div class="sucursal-tag">Opine Company Ltda.</div>
+
+      <div class="icon-row">
+        <div class="app-icon">
+          <div class="tile" style="background:var(--discord)">
+            <svg viewBox="0 0 24 24"><path fill="#fff" d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03ZM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418Zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"/></svg>
+          </div>
+          <div class="badge-count" id="badgeDiscord" style="display:none">0</div>
+          <span class="label">Discord</span>
+        </div>
+
+        <div class="app-icon">
+          <div class="tile" style="background:var(--tawk)">
+            <svg viewBox="0 0 24 24">
+              <path fill="#fff" d="M12 4C7.6 4 4 7 4 10.7c0 2.1 1.2 4 3 5.2-.1.9-.5 1.9-1.2 2.7a.4.4 0 0 0 .4.6c1.5-.2 2.8-.8 3.8-1.6.6.1 1.3.2 2 .2 4.4 0 8-3 8-6.7C20 7 16.4 4 12 4Z"/>
+              <path fill="var(--tawk)" d="M9.3 10.3c0-.5.1-1 .4-1.4l1 .7a1 1 0 0 0-.2.7c0 .6.5 1 1 1 .4 0 .7-.2.9-.5l1 .6c-.4.6-1.1 1-1.9 1-1.2 0-2.2-.9-2.2-2.1Zm3.4 3.3c.4-.4.7-.9.7-1.5 0-.2 0-.4-.1-.6l1.1-.5c.1.4.2.7.2 1.1 0 1-.5 1.8-1.2 2.4l-.7-.9Z"/>
+            </svg>
+          </div>
+          <div class="badge-count" id="badgeTawk" style="display:none">0</div>
+          <span class="label">Tawk.to</span>
+        </div>
+
+        <div class="app-icon">
+          <div class="tile" style="background:linear-gradient(160deg,var(--mail1),var(--mail2))">
+            <svg viewBox="0 0 24 24">
+              <path fill="#fff" d="M4 8.1c0-1.2.9-2.1 2.1-2.1h11.8c1.2 0 2.1.9 2.1 2.1v8.2c0 1.2-.9 2.1-2.1 2.1H6.1A2.1 2.1 0 0 1 4 16.3V8.1Z"/>
+              <path fill="var(--mail2)" opacity="0.35" d="M5 7.3 12 13l7-5.7v1.6L12 14.7 5 8.9V7.3Z"/>
+            </svg>
+          </div>
+          <div class="badge-count" id="badgeCorreo" style="display:none">0</div>
+          <span class="label">Correo</span>
+        </div>
+
+        <div class="acuse-widget" id="acuseWidget" style="display:none">
+          <div class="acuse-check">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#0B3D1F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <span class="acuse-text" id="acuseText"></span>
+        </div>
+      </div>
+
+      <div class="ml-header-wide">
+        <div class="app-icon">
+          <div class="tile" style="background:var(--ml)">
+            <svg viewBox="0 0 24 24"><path fill="#2D3277" d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 2.3 5.9 3.4-5.9 3.4-5.9-3.4L12 5.3Zm-7 5.1 6 3.5v6.8l-6-3.4v-6.9Zm8 10.3v-6.8l6-3.5v6.9l-6 3.4Z"/></svg>
+          </div>
+          <div class="badge-count">4</div>
+        </div>
+        <div class="ml-header-title">MercadoLibre<br><b>4 ventas nuevas</b></div>
+        <div class="ml-header-track-wrap">
+          <div class="ml-header-track">
+            <span>Venta — <b>Toner HP 05A ×3</b> — $42.900</span>
+            <span>Venta — <b>Cartucho Canon 047</b> — $18.500</span>
+            <span>Venta — <b>Toner Brother TN-660</b> — $21.900</span>
+            <span>Venta — <b>Repuesto fusor Samsung</b> — $35.000</span>
+            <span>Venta — <b>Toner HP 05A ×3</b> — $42.900</span>
+            <span>Venta — <b>Cartucho Canon 047</b> — $18.500</span>
+            <span>Venta — <b>Toner Brother TN-660</b> — $21.900</span>
+            <span>Venta — <b>Repuesto fusor Samsung</b> — $35.000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cal-block">
+      <div class="date-day">Miércoles</div>
+      <div class="date-full">10 de Septiembre, 2026</div>
+
+      <div class="cal-native">
+        <div class="cal-native-title">Próximos 7 días</div>
+        <div class="cal-scroll">
+        <table class="seven-days">
+          <tr>
+            <td class="day-box today">
+              <div class="day-name">Jue</div>
+              <div class="day-num">10</div>
+              <div class="ev-block">Reunión sucursal</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Vie</div>
+              <div class="day-num">11</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Sáb</div>
+              <div class="day-num">12</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Dom</div>
+              <div class="day-num">13</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Lun</div>
+              <div class="day-num">14</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Mar</div>
+              <div class="day-num">15</div>
+            </td>
+            <td class="day-box">
+              <div class="day-name">Mié</div>
+              <div class="day-num">16</div>
+              <div class="ev-block">Despacho Bolivia</div>
+            </td>
+          </tr>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTAS: ancho completo, escalonadas, límite 3, luego marquee -->
+  <div class="alerts-zone" id="alertsZone"></div>
+
+  <!-- 3 PANELES -->
+  <div class="main">
+
+    <div class="panel">
+      <div class="panel-head">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5 12 4l8 4.5-8 4.5-8-4.5Z" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 8.5V16l8 4.5 8-4.5V8.5" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 13v7.5" stroke="#F0299D" stroke-width="1.4"/></svg>
+        <div class="panel-title">Pedidos a Retirar</div>
+        <div class="panel-count" id="retirarCount">— pendientes</div>
+      </div>
+      <div class="ticker-wrap">
+        <div class="ticker" id="retirarTicker"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="11" height="9" rx="1.2" stroke="#F0299D" stroke-width="1.4"/><path d="M14 10h3.3L20 13v3h-6v-6Z" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="1.4" stroke="#F0299D" stroke-width="1.3"/><circle cx="16.5" cy="17.5" r="1.4" stroke="#F0299D" stroke-width="1.3"/></svg>
+        <div class="panel-title">Pedidos a Despachar</div>
+        <div class="panel-count" id="despacharCount">— en ruta</div>
+      </div>
+      <div class="ticker-wrap slow">
+        <div class="ticker" id="despacharTicker"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="demo-controls">
+    <span>demo:</span>
+    <button onclick="addAlert(nextSample())">+ Simular alerta</button>
+    <button onclick="clearAll()">Limpiar</button>
+  </div>
+
+</div>
+
+<script>
+  // Cada TV de sucursal apunta a esta misma página con ?sucursal=<id> en la
+  // URL del kiosko (ej. https://hub.railway.app/?sucursal=providencia).
+  // Sin el parámetro, cae a "providencia" para que el mockup siga andando solo.
+  const SUCURSAL = new URLSearchParams(location.search).get('sucursal') || 'providencia';
+  let sucursalNombre = SUCURSAL;
+
+  async function fetchSucursal(){
+    try {
+      const res = await fetch(`/api/sucursales/${SUCURSAL}`);
+      if(!res.ok) throw new Error('sucursal no encontrada');
+      const data = await res.json();
+      sucursalNombre = data.nombre;
+      document.getElementById('sucursalName').textContent = data.nombre;
+    } catch {
+      document.getElementById('sucursalName').textContent = SUCURSAL;
+    }
+  }
+
+  const samples = [
+    '🔴 Nuevo mensaje en Discord — Bodega Central',
+    '📧 Correo nuevo de Proveedor ABC',
+    '💬 Chat nuevo en Tawk.to — cliente esperando',
+    '🛒 Nueva orden de MercadoLibre — Toner Brother TN-660',
+    '📦 Pedido #1046 listo para retirar — Roberto Díaz'
+  ];
+  let sampleIdx = 0;
+  function nextSample(){
+    const s = samples[sampleIdx % samples.length];
+    sampleIdx++;
+    return s;
+  }
+
+  let alerts = [];
+
+  async function fetchAlerts(){
+    const res = await fetch(`/api/alerts?sucursal=${SUCURSAL}`);
+    alerts = await res.json();
+    render();
+  }
+  async function addAlert(text){
+    await fetch('/api/alerts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({source: 'manual', sucursal_id: SUCURSAL, text})
+    });
+    fetchAlerts();
+  }
+  function ackBody(){
+    return {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({acknowledged_by: SUCURSAL})};
+  }
+  async function removeAlert(id){
+    // "Borrar" una alerta es un acuse de recibo (PATCH), no un delete real —
+    // así queda registro de que alguien la vio.
+    await fetch(`/api/alerts/${id}`, ackBody());
+    fetchAlerts();
+    fetchLeidas();
+  }
+  async function clearAll(){
+    await Promise.all(alerts.map(a => fetch(`/api/alerts/${a.id}`, ackBody())));
+    fetchAlerts();
+    fetchLeidas();
+  }
+
+  // ---- Carrusel de "mensaje leído" ----
+  let leidos = [];
+  let leidoIdx = 0;
+
+  async function fetchLeidas(){
+    const res = await fetch(`/api/alerts/leidas?sucursal=${SUCURSAL}`);
+    leidos = await res.json();
+    renderLeidoCarousel();
+  }
+
+  function renderLeidoCarousel(){
+    const widget = document.getElementById('acuseWidget');
+    if(leidos.length === 0){ widget.style.display = 'none'; return; }
+    widget.style.display = 'flex';
+    if(leidoIdx >= leidos.length) leidoIdx = 0;
+    const hora = new Date(leidos[leidoIdx].acknowledged_at).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'});
+    const nombreCorto = sucursalNombre.replace(/^Sucursal\s+/i, '').toUpperCase();
+    document.getElementById('acuseText').textContent = `MENSAJE LEÍDO ${nombreCorto} · ${hora}`;
+  }
+
+  setInterval(() => { leidoIdx++; renderLeidoCarousel(); }, 4000);
+
+  const SWIPE_DISMISS_PX = 70;
+
+  function enableSwipeDismiss(el, onDismiss){
+    let startX = 0, dx = 0, dragging = false;
+
+    function onStart(x){
+      dragging = true;
+      startX = x;
+      el.style.transition = 'none';
+    }
+    function onMove(x){
+      if(!dragging) return;
+      dx = x - startX;
+      el.style.transform = `translateX(${dx}px)`;
+      el.style.opacity = String(1 - Math.min(Math.abs(dx) / 220, 0.7));
+    }
+    function onEnd(){
+      if(!dragging) return;
+      dragging = false;
+      el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+      if(Math.abs(dx) > SWIPE_DISMISS_PX){
+        el.style.transform = `translateX(${dx > 0 ? 220 : -220}px)`;
+        el.style.opacity = '0';
+        setTimeout(onDismiss, 180);
+      } else {
+        el.style.transform = 'translateX(0)';
+        el.style.opacity = '1';
+      }
+      dx = 0;
+    }
+
+    el.addEventListener('touchstart', (e) => onStart(e.touches[0].clientX), {passive:true});
+    el.addEventListener('touchmove', (e) => onMove(e.touches[0].clientX), {passive:true});
+    el.addEventListener('touchend', onEnd);
+
+    el.addEventListener('click', (e) => {
+      if(Math.abs(dx) > 4) return;
+      onDismiss();
+    });
+  }
+
+  function render(){
+    const zone = document.getElementById('alertsZone');
+    zone.innerHTML = '';
+    if(alerts.length === 0) return;
+
+    if(alerts.length <= 3){
+      alerts.forEach((a) => {
+        const bar = document.createElement('div');
+        bar.className = 'alert-bar';
+        bar.innerHTML = '<span class="alert-dot"></span><span class="alert-text"></span>';
+        bar.querySelector('.alert-text').textContent = a.text;
+        enableSwipeDismiss(bar, () => removeAlert(a.id));
+        zone.appendChild(bar);
+      });
+    } else {
+      const bar = document.createElement('div');
+      bar.className = 'marquee-bar';
+      const wrap = document.createElement('div');
+      wrap.className = 'marquee-track-wrap';
+      const track = document.createElement('div');
+      track.className = 'marquee-track';
+      track.textContent = alerts.map(a => a.text).join('     •     ');
+      wrap.appendChild(track);
+      bar.appendChild(wrap);
+      enableSwipeDismiss(bar, clearAll);
+      zone.appendChild(bar);
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function fetchPedidos(){
+    const [retirar, despachar] = await Promise.all([
+      fetch(`/api/pedidos/retirar?sucursal=${SUCURSAL}`).then(r => r.json()),
+      fetch(`/api/pedidos/despachar?sucursal=${SUCURSAL}`).then(r => r.json())
+    ]);
+
+    document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
+    const retirarHtml = retirar.map(p =>
+      `<div class="order-card"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${p.detalle ? escapeHtml(p.detalle) : new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
+    ).join('');
+    document.getElementById('retirarTicker').innerHTML = retirarHtml + retirarHtml;
+
+    document.getElementById('despacharCount').textContent = `${despachar.length} en ruta`;
+    // FileMaker no tiene una señal de "ya se despachó" para esta tabla — el
+    // cierre es manual: tocar la tarjeta la saca de la lista.
+    const despacharHtml = despachar.map(p =>
+      `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
+    ).join('');
+    document.getElementById('despacharTicker').innerHTML = despacharHtml + despacharHtml;
+  }
+
+  async function dismissDespacho(id){
+    await fetch(`/api/pedidos/despachar/${encodeURIComponent(id)}`, {method: 'DELETE'});
+    fetchPedidos();
+  }
+  document.getElementById('despacharTicker').addEventListener('click', (e) => {
+    const card = e.target.closest('.order-card');
+    if(card) dismissDespacho(card.dataset.id);
+  });
+
+  async function fetchBadgeCounts(){
+    const counts = await fetch(`/api/alerts/counts?sucursal=${SUCURSAL}`).then(r => r.json());
+    for (const [source, elId] of [['discord','badgeDiscord'], ['tawk','badgeTawk'], ['correo','badgeCorreo']]) {
+      const el = document.getElementById(elId);
+      const n = counts[source] || 0;
+      el.textContent = n;
+      el.style.display = n > 0 ? 'flex' : 'none';
+    }
+  }
+
+  fetchSucursal().then(fetchLeidas);
+  fetchAlerts();
+  fetchPedidos();
+  fetchBadgeCounts();
+  setInterval(fetchAlerts, 4000);
+  setInterval(fetchLeidas, 60000);
+  setInterval(fetchBadgeCounts, 10000);
+  setInterval(fetchPedidos, 8000);
+</script>
+
+</body>
+</html>
