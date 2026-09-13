@@ -4,9 +4,11 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
+const { startEmailListener } = require('./email-listener');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 startDiscordBot(supabase);
+startEmailListener(supabase);
 
 const app = express();
 

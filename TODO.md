@@ -76,6 +76,8 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [ ] Sin empezar — queda para después de tener las fuentes de datos reales funcionando
 
 ## 10. Deploy
-- [ ] Deploy del hub en Railway (leyendo de Supabase)
-- [ ] Configurar variables de entorno en Railway (Supabase URL + service role key, credenciales de Discord/Tawk/ML/correo)
-- [ ] Sideload de kiosk browser en Fire TV Stick apuntando a la URL de Railway
+- [x] Repo en GitHub (`sebastianpd1/opineco-notification`), deploy en Railway conectado a ese repo
+- [x] Root Directory `server`, dashboard movido a `server/public/` (Railway no incluía archivos fuera del Root Directory)
+- [x] Variables de entorno base cargadas (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`) — probado en producción: `https://opineco-notification-production.up.railway.app/?sucursal=providencia`
+- [ ] Cargar `DISCORD_BOT_TOKEN`/`DISCORD_CHANNELS` y `TAWK_WEBHOOK_SECRET`/`TAWK_PROPERTIES` en Railway cuando estén listos esos dos ítems
+- [ ] Sideload de kiosk browser en Fire TV Stick apuntando a la URL de Railway (con `?sucursal=<id>` de cada sucursal)
