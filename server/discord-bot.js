@@ -52,6 +52,9 @@ function startDiscordBot(supabase) {
 
   client.on('messageCreate', async (message) => {
     try {
+      // DEBUG temporal — sacar una vez confirmado que el mapeo de canales anda bien.
+      console.log(`[discord debug] channelId=${message.channelId} enMapa=${Object.prototype.hasOwnProperty.call(channelMap, message.channelId)} bot=${message.author.bot} contenido="${message.content}"`);
+
       if (message.author.bot) return;
       if (!Object.prototype.hasOwnProperty.call(channelMap, message.channelId)) return;
       if (!message.content) return; // ignora mensajes solo con adjuntos/embeds por ahora
