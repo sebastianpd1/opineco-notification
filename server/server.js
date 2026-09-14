@@ -26,11 +26,17 @@ const app = express();
 // TAWK_PROPERTIES: JSON opcional {"propertyId": "sucursal_id o null"} para
 // mapear de qué property vino el chat — sin esto, todo es broadcast.
 app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) => {
+  // DEBUG temporal — sacar una vez confirmado que Tawk pega bien acá.
+  console.log(`[tawk debug] headers=${JSON.stringify(req.headers)} body=${req.body.toString('utf8').slice(0, 500)}`);
+
   const secret = process.env.TAWK_WEBHOOK_SECRET;
   if (secret) {
     const signature = req.get('X-Tawk-Signature') || '';
     const expected = crypto.createHmac('sha1', secret).update(req.body).digest('hex');
-    if (signature !== expected) return res.status(401).json({ error: 'firma inválida' });
+    if (signature !== expected) {
+      console.log(`[tawk debug] firma no coincide: recibida=${signature} esperada=${expected}`);
+      return res.status(401).json({ error: 'firma inválida' });
+    }
   }
 
   let payload;
@@ -42,6 +48,7 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
 
   res.status(200).end(); // responder rápido, Tawk reintenta si no hay 2xx pronto
 
+  console.log(`[tawk debug] event=${payload.event}`);
   if (payload.event !== 'chat:start') return; // único evento que usamos, ver investigacion-integraciones.md
 
   let propertyMap = {};
