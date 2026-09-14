@@ -137,18 +137,20 @@ app.get('/api/alerts/counts', async (req, res) => {
   const { sucursal } = req.query;
   const sources = ['discord', 'tawk', 'correo'];
   try {
-    const counts = {};
-    for (const source of sources) {
+    const results = await Promise.all(sources.map((source) => {
       let query = supabase
         .from('notificaciones_sucursal')
         .select('*', { count: 'exact', head: true })
         .eq('source', source)
         .is('acknowledged_at', null);
       if (sucursal) query = query.or(`sucursal_id.eq.${sucursal},sucursal_id.is.null`);
-      const { count, error } = await query;
-      if (error) throw error;
-      counts[source] = count || 0;
-    }
+      return query;
+    }));
+    const counts = {};
+    sources.forEach((source, i) => {
+      if (results[i].error) throw results[i].error;
+      counts[source] = results[i].count || 0;
+    });
     res.json(counts);
   } catch (error) {
     handleSupabaseError(res, error);
