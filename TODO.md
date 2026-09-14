@@ -61,8 +61,8 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] Confirmado: solo existen 4 eventos de webhook — `chat:start`, `chat:end`, transcripción de chat, `ticket:create`. **No existe evento de "chat esperando respuesta"** — se usará `chat:start` como proxy (limitación aceptada, no hay alternativa nativa)
 - [x] Implementado `POST /api/webhooks/tawk` en el hub — recibe `chat:start`, valida firma HMAC-SHA1 (si `TAWK_WEBHOOK_SECRET` está seteada), guarda en `notificaciones_sucursal`. Probado con payload simulado + firma válida/inválida.
 - [x] Mapeo property→sucursal vía `TAWK_PROPERTIES` (mismo patrón que `DISCORD_CHANNELS`) — sin configurar, todo es broadcast
-- [ ] **Pendiente de vos:** en el panel de Tawk, crear el webhook apuntando a `https://<tu-url-de-railway>/api/webhooks/tawk` (evento `chat:start`), copiar el secret key que te dé Tawk y setearlo como `TAWK_WEBHOOK_SECRET` en Railway
-- [ ] Confirmar los IDs de `property` si hay más de un sitio/widget de Tawk y hace falta mapear a sucursales específicas
+- [x] Webhook creado en Tawk, `TAWK_WEBHOOK_SECRET` cargado en Railway — **confirmado funcionando con un chat real** (no simulado): llegó al dashboard con firma válida
+- [x] Un solo sitio/widget de Tawk — sin `TAWK_PROPERTIES`, todo queda broadcast a todas las sucursales
 
 ## 8. Correo (GoDaddy, dominio de la empresa)
 > Investigación completa en [investigacion-integraciones.md](investigacion-integraciones.md#3-correo--godaddy-con-dominio-de-la-empresa)
