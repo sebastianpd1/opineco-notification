@@ -6,7 +6,13 @@ const { Client, GatewayIntentBits } = require('discord.js');
 // Si querés que un canal avise a TODAS las sucursales, usá null como valor.
 function parseChannelMap() {
   try {
-    return JSON.parse(process.env.DISCORD_CHANNELS || '{}');
+    const parsed = JSON.parse(process.env.DISCORD_CHANNELS || '{}');
+    const esObjetoPlano = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+    if (!esObjetoPlano) {
+      console.error(`DISCORD_CHANNELS debe ser un objeto JSON como {"canalId": "sucursal"} — vino: ${process.env.DISCORD_CHANNELS}`);
+      return {};
+    }
+    return parsed;
   } catch {
     console.error('DISCORD_CHANNELS no es JSON válido — el bot no va a reenviar nada.');
     return {};
@@ -33,22 +39,33 @@ function startDiscordBot(supabase) {
     ],
   });
 
-  client.once('ready', () => {
+  // Nunca dejar que un error del bot tumbe el proceso entero — este mismo
+  // proceso también sirve el dashboard y la API, así que un bug acá no debe
+  // afectar nada más.
+  client.on('error', (err) => {
+    console.error('Error del cliente de Discord (no fatal):', err.message);
+  });
+
+  client.once('clientReady', () => {
     console.log(`Bot de Discord conectado como ${client.user.tag}`);
   });
 
   client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    if (!(message.channelId in channelMap)) return;
+    try {
+      if (message.author.bot) return;
+      if (!Object.prototype.hasOwnProperty.call(channelMap, message.channelId)) return;
+      if (!message.content) return; // ignora mensajes solo con adjuntos/embeds por ahora
 
-    const sucursal_id = channelMap[message.channelId] || null;
-    const text = `${message.author.username}: ${message.content}`.slice(0, 300);
-    if (!message.content) return; // ignora mensajes solo con adjuntos/embeds por ahora
+      const sucursal_id = channelMap[message.channelId] || null;
+      const text = `${message.author.username}: ${message.content}`.slice(0, 300);
 
-    const { error } = await supabase
-      .from('notificaciones_sucursal')
-      .insert({ sucursal_id, source: 'discord', text });
-    if (error) console.error('Error guardando mensaje de Discord:', error);
+      const { error } = await supabase
+        .from('notificaciones_sucursal')
+        .insert({ sucursal_id, source: 'discord', text });
+      if (error) console.error('Error guardando mensaje de Discord:', error);
+    } catch (err) {
+      console.error('Error procesando mensaje de Discord (no fatal):', err.message);
+    }
   });
 
   client.login(token).catch((err) => {

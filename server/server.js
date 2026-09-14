@@ -6,6 +6,15 @@ const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
 
+// Red de seguridad: un bug en cualquier integración (Discord, correo, etc.)
+// no debe tumbar el hub entero — acá también vive el dashboard y la API.
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException (el hub sigue corriendo):', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('unhandledRejection (el hub sigue corriendo):', err);
+});
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 startDiscordBot(supabase);
 startEmailListener(supabase);
