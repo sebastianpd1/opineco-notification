@@ -53,8 +53,8 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] Implementado en `server/discord-bot.js` (usa `discord.js`, Gateway API) — se conecta e inserta directo en `notificaciones_sucursal` vía el mismo cliente de Supabase del hub, no hace un POST HTTP a sí mismo
 - [x] Mapeo canal→sucursal vía `DISCORD_CHANNELS` (JSON `{"canalId": "sucursal_id o null para broadcast"}`) — decisión tomada: configurable por canal en vez de asumir una sola opción, así cubre ambos casos sin tocar código
 - [x] Badge-count implementado: `GET /api/alerts/counts?sucursal=X` cuenta alertas sin acuse por `source`, dashboard lo consulta cada 10s y esconde el badge si es 0 (ya no está hardcodeado a 3/2/48)
-- [ ] **Pendiente de vos:** crear la app/bot en el [Discord Developer Portal](https://discord.com/developers/applications), activar el intent privilegiado **Message Content**, invitar el bot al servidor, y darme el token + los IDs de los canales a escuchar (clic derecho al canal → Copiar ID, con modo desarrollador activado en Discord)
-- [ ] Setear `DISCORD_BOT_TOKEN` y `DISCORD_CHANNELS` en `server/.env` (local) y en Railway (producción)
+- [x] Bot creado, invitado al servidor, token y canales configurados en Railway — **confirmado funcionando en producción** (mensaje real de prueba llegó al dashboard)
+- [x] Bug encontrado y arreglado en el camino: un `DISCORD_CHANNELS` mal formado tumbaba el hub entero (proceso compartido con el dashboard/API) — ahora el bot nunca puede crashear el proceso principal
 
 ## 7. Tawk.to
 > Investigación completa en [investigacion-integraciones.md](investigacion-integraciones.md#2-tawkto)
