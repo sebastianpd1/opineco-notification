@@ -380,16 +380,16 @@
         </div>
       </div>
 
-      <div class="ml-header-wide">
+      <div class="ml-header-wide" id="mlWidget" style="display:none">
         <div class="app-icon">
           <div class="tile" style="background:var(--ml)">
             <svg viewBox="0 0 24 24"><path fill="#2D3277" d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 2.3 5.9 3.4-5.9 3.4-5.9-3.4L12 5.3Zm-7 5.1 6 3.5v6.8l-6-3.4v-6.9Zm8 10.3v-6.8l6-3.5v6.9l-6 3.4Z"/></svg>
           </div>
-          <div class="badge-count">4</div>
+          <div class="badge-count" id="mlBadge">0</div>
         </div>
-        <div class="ml-header-title">MercadoLibre<br><b>4 ventas nuevas</b></div>
+        <div class="ml-header-title">MercadoLibre<br><b id="mlTitle">0 ventas nuevas</b></div>
         <div class="ml-header-track-wrap">
-          <div class="ml-header-track">
+          <div class="ml-header-track" id="mlTrack">
             <span>Venta — <b>Toner HP 05A ×3</b> — $42.900</span>
             <span>Venta — <b>Cartucho Canon 047</b> — $18.500</span>
             <span>Venta — <b>Toner Brother TN-660</b> — $21.900</span>
@@ -687,14 +687,32 @@
     }
   }
 
+  async function fetchVentasML(){
+    const ventas = await fetch('/api/ventas-ml').then(r => r.json());
+    const widget = document.getElementById('mlWidget');
+    if(ventas.length === 0){ widget.style.display = 'none'; return; }
+    widget.style.display = 'flex';
+    document.getElementById('mlBadge').textContent = ventas.length;
+    document.getElementById('mlTitle').textContent = `${ventas.length} venta${ventas.length === 1 ? '' : 's'} nueva${ventas.length === 1 ? '' : 's'}`;
+
+    const items = ventas.map(v => {
+      const item = (v.items && v.items[0]) || {};
+      const monto = v.monto_total ? `$${Number(v.monto_total).toLocaleString('es-CL')}` : '';
+      return `<span>Venta — <b>${escapeHtml(item.titulo || 'Producto')}</b> — ${monto}</span>`;
+    }).join('');
+    document.getElementById('mlTrack').innerHTML = items + items;
+  }
+
   fetchSucursal().then(fetchLeidas);
   fetchAlerts();
   fetchPedidos();
   fetchBadgeCounts();
+  fetchVentasML();
   setInterval(fetchAlerts, 4000);
   setInterval(fetchLeidas, 60000);
   setInterval(fetchBadgeCounts, 10000);
   setInterval(fetchPedidos, 8000);
+  setInterval(fetchVentasML, 30000);
 </script>
 
 </body>

@@ -112,6 +112,10 @@ No es push real hacia FileMaker — es push ML→Railway, y pull Railway→FileM
 **Camino 1 — Consumo del relay:**
 `GET https://mlwebhook-production.up.railway.app/meli/webhook/consume` — devuelve un array de notificaciones pendientes y las drena al consumirlas (patrón de cola). Cada entrada: `{ "order_id": "...", "seller_id": 1234567, "ts": "..." }`. Este relay es una pieza propia de Opineco (no es el payload real de ML) — normaliza lo que sea que ML le mande a un endpoint público que Opineco ya tiene corriendo en Railway.
 
+**Actualización tras revisar el código real del relay (`meli-proxy`):** ese `/consume` **es destructivo** (vacía el buffer en memoria al leerlo) y lo usa FileMaker — nuestro hub no puede compartirlo sin robarle eventos. El mismo relay expone `GET /meli/webhook/events`, que es **no destructivo** (devuelve el buffer sin vaciarlo, deduplicado por `order_id`) — es el que usa nuestro hub (`server/mercadolibre.js`), pollenado cada 60s, sin interferir con el consumo de FileMaker. El buffer es un ring buffer en memoria de 500 eventos (sin base de datos del lado del relay) — si nadie lo lee, los eventos más viejos se van pisando solos.
+
+Los access tokens de las 3 cuentas activas **no están en Supabase** — viven en FileMaker (layout `VARIABLESCONFIG`, base `MultiData`), accesibles vía la API XML de FileMaker (`fmi/xml/fmresultset.xml`) con auth básica. El hub los lee ahí directo (`FM_TOKENS_URL`/`FM_AUTH_USER`/`FM_AUTH_PASS`) en vez de manejar su propio refresh OAuth.
+
 **Camino 2 — Polling de respaldo (sin depender del webhook):**
 `GET https://api.mercadolibre.com/orders/search?seller={seller_id}&order.date_created.from={ISO}&sort=date_desc&limit=50&offset={N}` con `Authorization: Bearer {token}`. Ventana de 48hs hacia atrás (decisión de negocio de Opineco, no límite de la API). Paginado por offset/limit, corta cuando `len(results) < limit`.
 

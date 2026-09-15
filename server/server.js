@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
+const { startMercadoLibrePoller } = require('./mercadolibre');
 
 // Red de seguridad: un bug en cualquier integración (Discord, correo, etc.)
 // no debe tumbar el hub entero — acá también vive el dashboard y la API.
@@ -18,6 +19,7 @@ process.on('unhandledRejection', (err) => {
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 startDiscordBot(supabase);
 startEmailListener(supabase);
+startMercadoLibrePoller(supabase);
 
 // Red de seguridad universal: cualquier alerta sin acuse de recibo que ya
 // tenga más de 24hs se cierra sola — no importa la fuente ni si la señal
@@ -268,6 +270,20 @@ app.delete('/api/pedidos/despachar/:id', requireApiKey, async (req, res) => {
   const { error } = await supabase.from('pedidos_despachar').delete().eq('id', req.params.id);
   if (error) return handleSupabaseError(res, error);
   res.status(204).end();
+});
+
+// ---------- Ventas Mercado Libre ----------
+// Se ocultan una vez despachadas/cerradas — ver investigacion-integraciones.md §1.1
+const ML_ESTADOS_OCULTOS = ['shipped', 'delivered', 'not_delivered', 'cancelled', 'closed', 'error', 'stale_shipped'];
+
+app.get('/api/ventas-ml', async (req, res) => {
+  const { data, error } = await supabase
+    .from('ventas_mercadolibre')
+    .select('*')
+    .not('shipping_status', 'in', `(${ML_ESTADOS_OCULTOS.join(',')})`)
+    .order('created_at', { ascending: false });
+  if (error) return handleSupabaseError(res, error);
+  res.json(data);
 });
 
 const PORT = process.env.PORT || 3000;

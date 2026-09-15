@@ -34,15 +34,16 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] Confirmada la tabla/campos reales: script "envío a región" → tabla `DETALLEENVIOS`, variables `$id`/`$cliente` ya existentes
 - [x] Trigger de cierre confirmado: el script corto que sincroniza `DETALLEENVIOS` → `despachos` (se dispara cuando se emite la etiqueta por API) — se le agrega el `DELETE` usando `$venta_id`
 
-## 4. Mercado Libre — EN PAUSA, retomar cuando toque
-> Arquitectura real confirmada en [investigacion-integraciones.md §1.1](investigacion-integraciones.md#11-arquitectura-real-de-ml-en-opineco-confirmada-reemplaza-los-supuestos-gen%C3%A9ricos-de-arriba) — **reemplaza** los supuestos genéricos de la sección 1 del mismo doc.
-- [x] Confirmado: ya existe un relay propio en Railway (`mlwebhook-production.up.railway.app`) que recibe el webhook real de ML y lo encola — se consume con `GET /meli/webhook/consume`
-- [x] Confirmado: hay un camino de respaldo 100% pull (`orders/search`, ventana de 48hs) que no depende del webhook — correr ambos
-- [x] Confirmado: el filtro real de negocio es `substatus == "ready_to_print"` (no el `shipping.status` genérico que había documentado antes)
-- [x] Confirmado: solo 3 de las 7 cuentas configuradas están activas — `CUENTA4`, `CUENTA5`, `CUENTA6`
-- [x] Dedupe: antes de gastar una llamada de más, chequear si `OrderID`/`ShippingID` ya existen en `ventas_mercadolibre`
-- [ ] Decidir si el hub consume directo el relay de Railway (`/meli/webhook/consume`) o si seguimos dependiendo de que FileMaker lo haga y nos avise a nosotros — **a definir cuando retomemos este ítem**
-- [ ] Implementar el poll al relay + el job de respaldo de 48hs, con el filtro `ready_to_print` y upsert a `ventas_mercadolibre` (agregar campo `via` para debug)
+## 4. Mercado Libre
+> Arquitectura real confirmada en [investigacion-integraciones.md §1.1](investigacion-integraciones.md#11-arquitectura-real-de-ml-en-opineco-confirmada-reemplaza-los-supuestos-gen%C3%A9ricos-de-arriba)
+- [x] Confirmado: relay propio en Railway (`mlwebhook-production.up.railway.app`, código `meli-proxy`) recibe el webhook real y lo guarda en un buffer en memoria
+- [x] Encontrado en el código del relay: `GET /meli/webhook/events` es **no destructivo** (a diferencia de `/consume`, que usa FileMaker y vacía el buffer) — el hub usa `/events` para no pisarle nada a FileMaker
+- [x] Confirmado: el filtro real de negocio es `substatus == "ready_to_print"` (no el `shipping.status` genérico documentado originalmente en la sección 1)
+- [x] Confirmado: los tokens de las 3 cuentas activas (`CUENTA4`/`5`/`6`) NO viven en Supabase — viven en FileMaker (layout `VARIABLESCONFIG`, campos `Token4`/`5`/`6`), leídos vía su API XML (`FM_TOKENS_URL`/`FM_AUTH_USER`/`FM_AUTH_PASS`, ya en `.env`)
+- [x] **Implementado y probado con datos reales**: `server/mercadolibre.js` pollea `/meli/webhook/events` cada 60s, lee tokens de FileMaker, enriquece con `GET /orders/{id}` + `GET /shipments/{id}`, filtra por `ready_to_print`, hace upsert en `ventas_mercadolibre` — confirmado con una venta real end-to-end
+- [x] Endpoint `GET /api/ventas-ml` y widget del dashboard conectados (ya no muestra datos dummy)
+- [ ] **Limitación conocida:** si el webhook llega antes de que la etiqueta esté lista (`substatus` todavía no es `ready_to_print`), esa venta se descarta y no se reintenta más tarde — falta el job de reconciliación/backup por polling (`orders/search`, ventana 48hs) para cubrir ese caso. Volumen bajo hoy, no es urgente, pero queda pendiente.
+- [ ] No implementado el campo `via` (WEBHOOK/ENDPOINT) para debug — evaluar si hace falta una vez que se vea el volumen real
 
 ## 5. Notificaciones rojas (FileMaker edit box → sucursal específica)
 - [x] Script de FileMaker: `POST /api/alerts` directo a Supabase con `sucursal_id` + `text` (ver `filemaker-scripts.md`)
