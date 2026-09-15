@@ -8,6 +8,8 @@
 // Los access tokens de las 3 cuentas activas NO viven en Supabase — viven en
 // FileMaker (layout VARIABLESCONFIG), leídos vía su XML Web Publishing API.
 
+const { enviarPush } = require('./push');
+
 const RELAY_EVENTS_URL = process.env.ML_RELAY_URL || 'https://mlwebhook-production.up.railway.app/meli/webhook/events';
 const POLL_MS = Number(process.env.ML_POLL_MS || 60000);
 const RECONCILE_MS = Number(process.env.ML_RECONCILE_MS || 5 * 60000);
@@ -99,6 +101,9 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
     fecha_envio_estimada: fechaEnvioEstimada,
   });
   if (error) throw error;
+
+  const item = items[0]?.titulo || 'producto';
+  enviarPush(supabase, null, { title: 'Mercado Libre', body: `Venta nueva (${cuentaNombre}) — ${item}`, url: '/' }).catch(() => {});
 
   return { guardado: true };
 }

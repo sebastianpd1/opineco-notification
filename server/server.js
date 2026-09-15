@@ -6,6 +6,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
 const { startMercadoLibrePoller } = require('./mercadolibre');
+const { enviarPush } = require('./push');
 
 // Red de seguridad: un bug en cualquier integración (Discord, correo, etc.)
 // no debe tumbar el hub entero — acá también vive el dashboard y la API.
@@ -87,6 +88,7 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
     .from('notificaciones_sucursal')
     .insert({ sucursal_id, source: 'tawk', text, external_ref: payload.chatId });
   if (error) console.error('Error guardando chat de Tawk:', error);
+  else enviarPush(supabase, sucursal_id, { title: 'Tawk.to', body: text, url: '/' }).catch(() => {});
 });
 
 app.use(express.json());
@@ -148,6 +150,7 @@ app.post('/api/alerts', requireApiKey, async (req, res) => {
     .select()
     .single();
   if (error) return handleSupabaseError(res, error);
+  enviarPush(supabase, sucursal_id || null, { title: title || 'Centro de Alertas', body: text, url: '/' }).catch(() => {});
   res.status(201).json(data);
 });
 
@@ -284,6 +287,35 @@ app.get('/api/ventas-ml', async (req, res) => {
     .order('created_at', { ascending: false });
   if (error) return handleSupabaseError(res, error);
   res.json(data);
+});
+
+// ---------- Push web (PWA) ----------
+app.get('/api/push/vapid-public-key', (req, res) => {
+  if (!process.env.VAPID_PUBLIC_KEY) return res.status(404).json({ error: 'push no configurado' });
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { subscription, sucursal_id } = req.body || {};
+  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+    return res.status(400).json({ error: 'subscription inválida' });
+  }
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    endpoint: subscription.endpoint,
+    p256dh: subscription.keys.p256dh,
+    auth: subscription.keys.auth,
+    sucursal_id: sucursal_id || null,
+  });
+  if (error) return handleSupabaseError(res, error);
+  res.status(201).json({ ok: true });
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'endpoint requerido' });
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  if (error) return handleSupabaseError(res, error);
+  res.status(204).end();
 });
 
 const PORT = process.env.PORT || 3000;

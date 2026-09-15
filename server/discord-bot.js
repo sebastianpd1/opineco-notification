@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+const { enviarPush } = require('./push');
 
 // DISCORD_CHANNELS: JSON con mapeo canal -> sucursal, ej.
 //   {"123456789012345678": "providencia", "234567890123456789": null}
@@ -83,6 +84,7 @@ function startDiscordBot(supabase) {
         .from('notificaciones_sucursal')
         .insert({ sucursal_id, source: 'discord', text, external_ref: message.id });
       if (error) console.error('Error guardando mensaje de Discord:', error);
+      else enviarPush(supabase, sucursal_id, { title: 'Discord', body: text, url: '/' }).catch(() => {});
     } catch (err) {
       console.error('Error procesando mensaje de Discord (no fatal):', err.message);
     }

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Centro de Alertas — Sucursal</title>
+<link rel="manifest" href="/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -488,6 +489,7 @@
     <span>demo:</span>
     <button onclick="addAlert(nextSample())">+ Simular alerta</button>
     <button onclick="clearAll()">Limpiar</button>
+    <button id="btnPush" onclick="activarPush()" style="display:none">🔔 Activar notificaciones</button>
   </div>
 
 </div>
@@ -725,11 +727,65 @@
     document.getElementById('mlTrack').innerHTML = items + items;
   }
 
+  // ---- Push web (PWA) — para celulares sin TV cerca ----
+  function urlBase64ToUint8Array(base64String){
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
+
+  async function activarPush(){
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const permiso = await Notification.requestPermission();
+      if (permiso !== 'granted') { alert('Permiso de notificaciones denegado.'); return; }
+
+      const { publicKey } = await fetch('/api/push/vapid-public-key').then(r => r.json());
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ subscription, sucursal_id: SUCURSAL })
+      });
+
+      document.getElementById('btnPush').textContent = '🔔 Notificaciones activadas';
+      document.getElementById('btnPush').disabled = true;
+    } catch (err) {
+      console.error('No se pudo activar push:', err);
+      alert('No se pudo activar las notificaciones en este navegador.');
+    }
+  }
+
+  async function initPush(){
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      const check = await fetch('/api/push/vapid-public-key');
+      if (!check.ok) return; // push no configurado del lado del servidor
+      await navigator.serviceWorker.register('/sw.js');
+      const btn = document.getElementById('btnPush');
+      const reg = await navigator.serviceWorker.ready;
+      const existente = await reg.pushManager.getSubscription();
+      if (existente) {
+        btn.textContent = '🔔 Notificaciones activadas';
+        btn.disabled = true;
+      }
+      btn.style.display = 'inline-block';
+    } catch (err) {
+      console.error('Error inicializando push:', err);
+    }
+  }
+
   fetchSucursal().then(fetchLeidas);
   fetchAlerts();
   fetchPedidos();
   fetchBadgeCounts();
   fetchVentasML();
+  initPush();
   setInterval(fetchAlerts, 4000);
   setInterval(fetchLeidas, 60000);
   setInterval(fetchBadgeCounts, 10000);

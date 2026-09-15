@@ -1,4 +1,5 @@
 const { ImapFlow } = require('imapflow');
+const { enviarPush } = require('./push');
 
 // Correo de GoDaddy (webmail legacy, sin webhook nativo) — la única opción es
 // mantener una conexión IMAP persistente en modo IDLE y reconectar sola si se
@@ -36,10 +37,12 @@ async function connectAndWatch(supabase) {
         const asunto = message.envelope?.subject || '(sin asunto)';
         const text = `📧 Correo nuevo de ${remitente} — ${asunto}`.slice(0, 300);
 
+        const sucursal_id = process.env.EMAIL_SUCURSAL || null;
         const { error } = await supabase
           .from('notificaciones_sucursal')
-          .insert({ sucursal_id: process.env.EMAIL_SUCURSAL || null, source: 'correo', text, external_ref: String(message.uid) });
+          .insert({ sucursal_id, source: 'correo', text, external_ref: String(message.uid) });
         if (error) console.error('Error guardando alerta de correo:', error);
+        else enviarPush(supabase, sucursal_id, { title: 'Correo', body: text, url: '/' }).catch(() => {});
       } catch (err) {
         console.error('Error procesando correo nuevo:', err.message);
       }
