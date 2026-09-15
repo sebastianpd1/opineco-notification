@@ -10,7 +10,12 @@
 
 const RELAY_EVENTS_URL = process.env.ML_RELAY_URL || 'https://mlwebhook-production.up.railway.app/meli/webhook/events';
 const POLL_MS = Number(process.env.ML_POLL_MS || 60000);
+const RECONCILE_MS = Number(process.env.ML_RECONCILE_MS || 5 * 60000);
 const SUBSTATUS_FILTER = process.env.ML_SUBSTATUS_FILTER || 'ready_to_print';
+
+// Una vez que el status de nivel superior llega a alguno de estos, la venta
+// se oculta del widget (GET /api/ventas-ml la filtra por esto).
+const ESTADOS_OCULTOS = ['shipped', 'delivered', 'not_delivered', 'cancelled', 'closed', 'error', 'stale_shipped'];
 
 // seller_id -> nombre de cuenta y campo Token en VARIABLESCONFIG.
 const CUENTAS = {
@@ -18,6 +23,9 @@ const CUENTAS = {
   1615390484: { nombre: 'CUENTA5', tokenField: 'Token5' },
   1613511081: { nombre: 'CUENTA6', tokenField: 'Token6' },
 };
+const CUENTA_POR_NOMBRE = Object.fromEntries(
+  Object.entries(CUENTAS).map(([sellerId, c]) => [c.nombre, sellerId])
+);
 
 function extraerCampoXml(xml, nombreCampo) {
   const re = new RegExp(`<field name="${nombreCampo}"><data>([^<]*)</data></field>`);
@@ -44,6 +52,14 @@ async function obtenerEventosPendientes() {
   return res.json(); // [{ order_id, seller_id, ts }, ...]
 }
 
+async function obtenerShipment(shippingId, token) {
+  const res = await fetch(`https://api.mercadolibre.com/shipments/${shippingId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GET /shipments/${shippingId} -> ${res.status}`);
+  return res.json();
+}
+
 async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   const orderRes = await fetch(`https://api.mercadolibre.com/orders/${event.order_id}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -54,11 +70,7 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   const shippingId = order?.shipping?.id;
   if (!shippingId) return { guardado: false, motivo: 'sin shipping.id' };
 
-  const shipRes = await fetch(`https://api.mercadolibre.com/shipments/${shippingId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!shipRes.ok) throw new Error(`GET /shipments/${shippingId} -> ${shipRes.status}`);
-  const shipment = await shipRes.json();
+  const shipment = await obtenerShipment(shippingId, token);
 
   if (shipment.substatus !== SUBSTATUS_FILTER) {
     return { guardado: false, motivo: `substatus=${shipment.substatus}, esperando ${SUBSTATUS_FILTER}` };
@@ -70,17 +82,67 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
     precio_unitario: oi.unit_price || 0,
   }));
 
+  // "Fecha estimada de envío": Mercado Libre no siempre la rellena — cuando
+  // no hay dato real, esto queda null (no hay campo confiable alternativo).
+  const fechaEnvioEstimada = shipment.shipping_option?.estimated_delivery_time?.date || null;
+
   const { error } = await supabase.from('ventas_mercadolibre').upsert({
     order_id: String(order.id),
     cuenta_ml: cuentaNombre,
     cliente: order.buyer?.nickname || null,
     items,
     monto_total: order.total_amount || null,
-    shipping_status: shipment.substatus,
+    shipping_id: String(shippingId),
+    shipping_status: shipment.status,
+    shipping_substatus: shipment.substatus,
+    fecha_compra: order.date_created || null,
+    fecha_envio_estimada: fechaEnvioEstimada,
   });
   if (error) throw error;
 
   return { guardado: true };
+}
+
+// Revisa las ventas que todavía están visibles y actualiza su estado real —
+// sin esto, una venta nunca se enteraría de que ya se despachó y quedaría
+// pegada en el widget para siempre.
+async function reconciliar(supabase) {
+  const { data: pendientes, error: selectError } = await supabase
+    .from('ventas_mercadolibre')
+    .select('order_id, cuenta_ml, shipping_id')
+    .not('shipping_status', 'in', `(${ESTADOS_OCULTOS.join(',')})`)
+    .not('shipping_id', 'is', null);
+  if (selectError) {
+    console.error('ML reconciliación: error leyendo pendientes:', selectError);
+    return;
+  }
+  if (pendientes.length === 0) return;
+
+  const tokens = await obtenerTokens();
+
+  for (const venta of pendientes) {
+    const sellerId = CUENTA_POR_NOMBRE[venta.cuenta_ml];
+    const token = sellerId && tokens[sellerId];
+    if (!token) {
+      console.error(`ML reconciliación: sin token para ${venta.cuenta_ml}, se salta ${venta.order_id}`);
+      continue;
+    }
+    try {
+      const shipment = await obtenerShipment(venta.shipping_id, token);
+      const update = {
+        shipping_status: shipment.status,
+        shipping_substatus: shipment.substatus,
+      };
+      if (ESTADOS_OCULTOS.includes(shipment.status)) {
+        update.shipped_at = new Date().toISOString();
+      }
+      const { error } = await supabase.from('ventas_mercadolibre').update(update).eq('order_id', venta.order_id);
+      if (error) throw error;
+      console.log(`ML reconciliación: order_id ${venta.order_id} -> status=${shipment.status}`);
+    } catch (err) {
+      console.error(`ML reconciliación: error con order_id ${venta.order_id}:`, err.message);
+    }
+  }
 }
 
 function startMercadoLibrePoller(supabase) {
@@ -135,7 +197,8 @@ function startMercadoLibrePoller(supabase) {
 
   ciclo();
   setInterval(ciclo, POLL_MS);
-  console.log(`Poller de Mercado Libre activo (cada ${POLL_MS / 1000}s, filtrando substatus=${SUBSTATUS_FILTER})`);
+  setInterval(() => reconciliar(supabase).catch((err) => console.error('ML reconciliación falló:', err.message)), RECONCILE_MS);
+  console.log(`Poller de Mercado Libre activo (cada ${POLL_MS / 1000}s, reconciliación cada ${RECONCILE_MS / 1000}s, filtrando substatus=${SUBSTATUS_FILTER})`);
 }
 
 module.exports = { startMercadoLibrePoller };

@@ -41,8 +41,11 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] Confirmado: el filtro real de negocio es `substatus == "ready_to_print"` (no el `shipping.status` genérico documentado originalmente en la sección 1)
 - [x] Confirmado: los tokens de las 3 cuentas activas (`CUENTA4`/`5`/`6`) NO viven en Supabase — viven en FileMaker (layout `VARIABLESCONFIG`, campos `Token4`/`5`/`6`), leídos vía su API XML (`FM_TOKENS_URL`/`FM_AUTH_USER`/`FM_AUTH_PASS`, ya en `.env`)
 - [x] **Implementado y probado con datos reales**: `server/mercadolibre.js` pollea `/meli/webhook/events` cada 60s, lee tokens de FileMaker, enriquece con `GET /orders/{id}` + `GET /shipments/{id}`, filtra por `ready_to_print`, hace upsert en `ventas_mercadolibre` — confirmado con una venta real end-to-end
-- [x] Endpoint `GET /api/ventas-ml` y widget del dashboard conectados (ya no muestra datos dummy)
-- [ ] **Limitación conocida:** si el webhook llega antes de que la etiqueta esté lista (`substatus` todavía no es `ready_to_print`), esa venta se descarta y no se reintenta más tarde — falta el job de reconciliación/backup por polling (`orders/search`, ventana 48hs) para cubrir ese caso. Volumen bajo hoy, no es urgente, pero queda pendiente.
+- [x] Guarda `shipping_id`, `fecha_compra` (`order.date_created`), `fecha_envio_estimada` (`shipping_option.estimated_delivery_time.date` — **ojo:** ML no siempre la rellena, viene null seguido)
+- [x] **Job de reconciliación cada 5 min** (`ML_RECONCILE_MS`): re-chequea el `status` real de las ventas visibles y las oculta solas cuando llega a `shipped`/`delivered`/etc. — probado con un shipment real, actualiza correctamente
+- [x] Fix: `shipping_status` guarda el `status` de nivel superior (para la regla de ocultar), `shipping_substatus` guarda el substatus (`ready_to_print`, `printed`, etc.) por separado — antes se guardaba el substatus en el campo equivocado
+- [x] Endpoint `GET /api/ventas-ml` y widget del dashboard conectados y **agrupados por cuenta** (ya no muestra datos dummy)
+- [ ] **Limitación conocida:** si el webhook llega antes de que la etiqueta esté lista (`substatus` todavía no es `ready_to_print`), esa venta se descarta y no se reintenta más tarde — falta el polling de respaldo (`orders/search`, ventana 48hs) para cubrir ese caso. Volumen bajo hoy, no es urgente, pero queda pendiente.
 - [ ] No implementado el campo `via` (WEBHOOK/ENDPOINT) para debug — evaluar si hace falta una vez que se vea el volumen real
 
 ## 5. Notificaciones rojas (FileMaker edit box → sucursal específica)

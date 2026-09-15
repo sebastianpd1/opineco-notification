@@ -695,10 +695,12 @@
     document.getElementById('mlBadge').textContent = ventas.length;
     document.getElementById('mlTitle').textContent = `${ventas.length} venta${ventas.length === 1 ? '' : 's'} nueva${ventas.length === 1 ? '' : 's'}`;
 
-    const items = ventas.map(v => {
+    // Agrupadas por cuenta — se ordenan así antes de armar el ticker.
+    const ordenadas = [...ventas].sort((a, b) => (a.cuenta_ml || '').localeCompare(b.cuenta_ml || ''));
+    const items = ordenadas.map(v => {
       const item = (v.items && v.items[0]) || {};
       const monto = v.monto_total ? `$${Number(v.monto_total).toLocaleString('es-CL')}` : '';
-      return `<span>Venta — <b>${escapeHtml(item.titulo || 'Producto')}</b> — ${monto}</span>`;
+      return `<span>[${escapeHtml(v.cuenta_ml || '—')}] Venta — <b>${escapeHtml(item.titulo || 'Producto')}</b> — ${monto}</span>`;
     }).join('');
     document.getElementById('mlTrack').innerHTML = items + items;
   }
