@@ -71,6 +71,13 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] Listener implementado (`server/email-listener.js`) y **confirmado funcionando en producción**: capturó un correo real entrante en tiempo real
 - [x] Usuario/contraseña cargados como variables de entorno en Railway
 - [x] Al llegar mensaje nuevo, genera alerta `source: 'correo'` — broadcast a todas las sucursales (es el correo general de la empresa, `ventas@opineco.cl`)
+- [x] Auto-cierre al marcar el correo como `\Seen` en cualquier cliente de mail — probado end-to-end con el buzón real (evento `flags` de imapflow no trae `uid` directo, hubo que resolverlo vía `seq`)
+
+## 11. Auto-cierre de alertas (evitar acumulación infinita)
+- [x] **Correo**: se cierra sola cuando el mensaje se marca `\Seen` (cualquier cliente de mail, sincronizado por IMAP)
+- [x] **Tawk**: se cierra sola con el evento `chat:end` — **pendiente que agregues ese evento al webhook de Tawk** (hoy solo está configurado `chat:start`)
+- [x] **Discord**: se cierra sola si alguien reacciona al mensaje o le responde (`reply`) — señales reales de que un humano lo vio, aunque Discord no tenga un "leído" formal
+- [x] **Red de seguridad universal**: cualquier alerta de cualquier fuente que lleve más de 24hs sin acuse se cierra sola (`auto:expirado_24h`), corre cada 30 min — cubre los casos donde la señal específica de la integración falle o no llegue
 
 ## 9. PWA + push web (celulares sin TV cerca)
 - [ ] Sin empezar — queda para después de tener las fuentes de datos reales funcionando

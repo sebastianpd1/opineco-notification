@@ -30,7 +30,7 @@ async function connectAndWatch(supabase) {
     client.on('exists', async () => {
       // Llegó correo nuevo — traer el más reciente sin marcarlo como leído.
       try {
-        const message = await client.fetchOne('*', { envelope: true }, { uid: false });
+        const message = await client.fetchOne('*', { envelope: true, uid: true }, { uid: false });
         if (!message) return;
         const remitente = message.envelope?.from?.[0]?.name || message.envelope?.from?.[0]?.address || 'Desconocido';
         const asunto = message.envelope?.subject || '(sin asunto)';
@@ -38,10 +38,36 @@ async function connectAndWatch(supabase) {
 
         const { error } = await supabase
           .from('notificaciones_sucursal')
-          .insert({ sucursal_id: process.env.EMAIL_SUCURSAL || null, source: 'correo', text });
+          .insert({ sucursal_id: process.env.EMAIL_SUCURSAL || null, source: 'correo', text, external_ref: String(message.uid) });
         if (error) console.error('Error guardando alerta de correo:', error);
       } catch (err) {
         console.error('Error procesando correo nuevo:', err.message);
+      }
+    });
+
+    // Si el correo se marca leído (\Seen) desde cualquier cliente de mail,
+    // cerramos sola la alerta correspondiente — así no queda pisando la TV
+    // algo que la persona ya vio en su bandeja.
+    // Ojo: el evento trae `seq` (número de secuencia), no `uid` directo, y
+    // `flags` es un array plano — hay que resolver el UID real con un fetch.
+    client.on('flags', async (update) => {
+      try {
+        const flags = Array.isArray(update.flags) ? update.flags : [...(update.flags || [])];
+        if (!flags.includes('\\Seen')) return;
+        if (!update.seq) return;
+
+        const message = await client.fetchOne(String(update.seq), { uid: true });
+        if (!message) return;
+
+        const { error } = await supabase
+          .from('notificaciones_sucursal')
+          .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: 'auto:correo_leido' })
+          .eq('source', 'correo')
+          .eq('external_ref', String(message.uid))
+          .is('acknowledged_at', null);
+        if (error) console.error('Error auto-cerrando alerta de correo:', error);
+      } catch (err) {
+        console.error('Error procesando cambio de flags de correo:', err.message);
       }
     });
 

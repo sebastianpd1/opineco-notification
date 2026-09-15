@@ -36,8 +36,21 @@ function startDiscordBot(supabase) {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMessageReactions,
     ],
   });
+
+  // Cierra sola la alerta de un mensaje de Discord — se usa tanto para
+  // reacciones como para replies, las dos señales de "alguien lo vio".
+  async function autoCerrar(messageId, motivo) {
+    const { error } = await supabase
+      .from('notificaciones_sucursal')
+      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: motivo })
+      .eq('source', 'discord')
+      .eq('external_ref', messageId)
+      .is('acknowledged_at', null);
+    if (error) console.error('Error auto-cerrando alerta de Discord:', error);
+  }
 
   // Nunca dejar que un error del bot tumbe el proceso entero — este mismo
   // proceso también sirve el dashboard y la API, así que un bug acá no debe
@@ -54,6 +67,13 @@ function startDiscordBot(supabase) {
     try {
       if (message.author.bot) return;
       if (!Object.prototype.hasOwnProperty.call(channelMap, message.channelId)) return;
+
+      // Un reply es una señal de "alguien lo vio" — cierra la alerta del
+      // mensaje original en vez de (o además de) crear una nueva.
+      if (message.reference?.messageId) {
+        await autoCerrar(message.reference.messageId, 'auto:discord_reply');
+      }
+
       if (!message.content) return; // ignora mensajes solo con adjuntos/embeds por ahora
 
       const sucursal_id = channelMap[message.channelId] || null;
@@ -61,10 +81,20 @@ function startDiscordBot(supabase) {
 
       const { error } = await supabase
         .from('notificaciones_sucursal')
-        .insert({ sucursal_id, source: 'discord', text });
+        .insert({ sucursal_id, source: 'discord', text, external_ref: message.id });
       if (error) console.error('Error guardando mensaje de Discord:', error);
     } catch (err) {
       console.error('Error procesando mensaje de Discord (no fatal):', err.message);
+    }
+  });
+
+  client.on('messageReactionAdd', async (reaction, user) => {
+    try {
+      if (user.bot) return;
+      if (!Object.prototype.hasOwnProperty.call(channelMap, reaction.message.channelId)) return;
+      await autoCerrar(reaction.message.id, 'auto:discord_reaction');
+    } catch (err) {
+      console.error('Error procesando reacción de Discord (no fatal):', err.message);
     }
   });
 

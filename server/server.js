@@ -19,6 +19,22 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SEC
 startDiscordBot(supabase);
 startEmailListener(supabase);
 
+// Red de seguridad universal: cualquier alerta sin acuse de recibo que ya
+// tenga más de 24hs se cierra sola — no importa la fuente ni si la señal
+// específica de esa integración (reply, chat:end, \Seen) falló o no existe.
+const VEINTICUATRO_HS_MS = 24 * 60 * 60 * 1000;
+async function limpiarAlertasVencidas() {
+  const limite = new Date(Date.now() - VEINTICUATRO_HS_MS).toISOString();
+  const { error } = await supabase
+    .from('notificaciones_sucursal')
+    .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: 'auto:expirado_24h' })
+    .is('acknowledged_at', null)
+    .lt('created_at', limite);
+  if (error) console.error('Error limpiando alertas vencidas:', error);
+}
+limpiarAlertasVencidas();
+setInterval(limpiarAlertasVencidas, 30 * 60 * 1000);
+
 const app = express();
 
 // Webhook de Tawk.to: va ANTES de express.json() porque necesitamos el body
@@ -42,7 +58,21 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
 
   res.status(200).end(); // responder rápido, Tawk reintenta si no hay 2xx pronto
 
-  if (payload.event !== 'chat:start') return; // único evento que usamos, ver investigacion-integraciones.md
+  if (payload.event === 'chat:end') {
+    // El chat terminó — lo tomamos como señal de "ya se atendió" y cerramos
+    // sola la alerta que abrió el chat:start correspondiente, sin esperar
+    // que alguien la toque a mano en la pantalla.
+    const { error } = await supabase
+      .from('notificaciones_sucursal')
+      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: 'auto:chat_end' })
+      .eq('source', 'tawk')
+      .eq('external_ref', payload.chatId)
+      .is('acknowledged_at', null);
+    if (error) console.error('Error auto-cerrando chat de Tawk:', error);
+    return;
+  }
+
+  if (payload.event !== 'chat:start') return; // los demás eventos no nos interesan
 
   let propertyMap = {};
   try { propertyMap = JSON.parse(process.env.TAWK_PROPERTIES || '{}'); } catch { /* queda vacío */ }
@@ -51,7 +81,9 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
   const visitante = payload.visitor?.name || 'Visitante';
   const text = `💬 Chat nuevo en Tawk.to — ${visitante}`;
 
-  const { error } = await supabase.from('notificaciones_sucursal').insert({ sucursal_id, source: 'tawk', text });
+  const { error } = await supabase
+    .from('notificaciones_sucursal')
+    .insert({ sucursal_id, source: 'tawk', text, external_ref: payload.chatId });
   if (error) console.error('Error guardando chat de Tawk:', error);
 });
 
