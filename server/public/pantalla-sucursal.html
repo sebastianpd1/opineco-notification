@@ -288,6 +288,11 @@
   .order-who{font-size:14px; font-weight:600; margin-top:2px;}
   .order-detail{font-size:12px; color:var(--dim); margin-top:2px;}
 
+  /* Ventas de Mercado Libre pendientes de despacho — amarillo, para
+     diferenciarlas de los despachos que vienen de FileMaker (rosa). */
+  .order-card.ml-card{background:rgba(255,230,0,0.08); border-color:rgba(255,230,0,0.3); cursor:default;}
+  .order-card.ml-card .order-id{color:var(--ml);}
+
   .notif-card{background:rgba(255,255,255,0.05); border-left:3px solid var(--pink); border-radius:8px; padding:10px 12px;}
   .notif-from{font-size:12px; font-weight:600; color:var(--pink);}
   .notif-text{font-size:13px; margin-top:3px; line-height:1.35;}
@@ -648,9 +653,10 @@
   }
 
   async function fetchPedidos(){
-    const [retirar, despachar] = await Promise.all([
+    const [retirar, despachar, ventasMl] = await Promise.all([
       fetch(`/api/pedidos/retirar?sucursal=${SUCURSAL}`).then(r => r.json()),
-      fetch(`/api/pedidos/despachar?sucursal=${SUCURSAL}`).then(r => r.json())
+      fetch(`/api/pedidos/despachar?sucursal=${SUCURSAL}`).then(r => r.json()),
+      fetch('/api/ventas-ml').then(r => r.json())
     ]);
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
@@ -659,13 +665,25 @@
     ).join('');
     document.getElementById('retirarTicker').innerHTML = retirarHtml + retirarHtml;
 
-    document.getElementById('despacharCount').textContent = `${despachar.length} en ruta`;
     // FileMaker no tiene una señal de "ya se despachó" para esta tabla — el
     // cierre es manual: tocar la tarjeta la saca de la lista.
     const despacharHtml = despachar.map(p =>
       `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
     ).join('');
-    document.getElementById('despacharTicker').innerHTML = despacharHtml + despacharHtml;
+
+    // Ventas de ML del día, todavía no despachadas — se cierran solas cuando
+    // Mercado Libre marca el envío como despachado (reconciliación del hub),
+    // no hay que tocarlas a mano acá.
+    const hoy = new Date().toDateString();
+    const ventasHoy = ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() === hoy);
+    const ventasMlHtml = ventasHoy.map(v => {
+      const item = (v.items && v.items[0]) || {};
+      return `<div class="order-card ml-card"><div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div><div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div><div class="order-detail">${escapeHtml(v.cliente || '')}</div></div>`;
+    }).join('');
+
+    document.getElementById('despacharCount').textContent = `${despachar.length + ventasHoy.length} en ruta`;
+    const combinado = despacharHtml + ventasMlHtml;
+    document.getElementById('despacharTicker').innerHTML = combinado + combinado;
   }
 
   async function dismissDespacho(id){
@@ -674,7 +692,7 @@
   }
   document.getElementById('despacharTicker').addEventListener('click', (e) => {
     const card = e.target.closest('.order-card');
-    if(card) dismissDespacho(card.dataset.id);
+    if(card && card.dataset.id) dismissDespacho(card.dataset.id);
   });
 
   async function fetchBadgeCounts(){
