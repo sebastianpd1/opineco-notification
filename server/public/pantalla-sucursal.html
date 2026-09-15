@@ -671,17 +671,19 @@
       `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
     ).join('');
 
-    // Ventas de ML del día, todavía no despachadas — se cierran solas cuando
-    // Mercado Libre marca el envío como despachado (reconciliación del hub),
-    // no hay que tocarlas a mano acá.
+    // Ventas de ML que ya cruzaron a un día distinto del de la compra y
+    // siguen sin despacharse (atrasadas) — recién ahí bajan a este panel.
+    // Mientras es el mismo día, solo aparecen en el ticker de arriba.
+    // Se cierran solas cuando ML marca el envío como despachado
+    // (reconciliación del hub), no hay que tocarlas a mano acá.
     const hoy = new Date().toDateString();
-    const ventasHoy = ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() === hoy);
-    const ventasMlHtml = ventasHoy.map(v => {
+    const ventasAtrasadas = ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() !== hoy);
+    const ventasMlHtml = ventasAtrasadas.map(v => {
       const item = (v.items && v.items[0]) || {};
       return `<div class="order-card ml-card"><div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div><div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div><div class="order-detail">${escapeHtml(v.cliente || '')}</div></div>`;
     }).join('');
 
-    document.getElementById('despacharCount').textContent = `${despachar.length + ventasHoy.length} en ruta`;
+    document.getElementById('despacharCount').textContent = `${despachar.length + ventasAtrasadas.length} en ruta`;
     const combinado = despacharHtml + ventasMlHtml;
     document.getElementById('despacharTicker').innerHTML = combinado + combinado;
   }
