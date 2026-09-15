@@ -66,11 +66,11 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 
 ## 8. Correo (GoDaddy, dominio de la empresa)
 > Investigación completa en [investigacion-integraciones.md](investigacion-integraciones.md#3-correo--godaddy-con-dominio-de-la-empresa)
-- [x] Confirmado: es webmail legacy de GoDaddy (no Microsoft 365) → sin webhook nativo, va por **IMAP + IDLE**
-- [ ] Confirmar el host IMAP exacto de la cuenta en el panel de GoDaddy (típicamente `imap.secureserver.net`, puerto 993)
-- [ ] Implementar el listener con `imapflow` dentro del proceso del hub: conexión persistente en `IDLE` sobre `INBOX`, con reconexión automática ante caídas
-- [ ] Guardar usuario/contraseña del buzón como variable de entorno en Railway (nunca en el repo)
-- [ ] Al llegar mensaje nuevo, normalizar remitente+asunto y generar alerta (`source: 'correo'`)
+- [x] Confirmado: es webmail legacy (no Microsoft 365) → sin webhook nativo, va por **IMAP + IDLE**
+- [x] Host IMAP real confirmado: `opineco.cl` (es cPanel, no `imap.secureserver.net` como se asumió al principio — ese rechaza el login)
+- [x] Listener implementado (`server/email-listener.js`) y **confirmado funcionando en producción**: capturó un correo real entrante en tiempo real
+- [x] Usuario/contraseña cargados como variables de entorno en Railway
+- [x] Al llegar mensaje nuevo, genera alerta `source: 'correo'` — broadcast a todas las sucursales (es el correo general de la empresa, `ventas@opineco.cl`)
 
 ## 9. PWA + push web (celulares sin TV cerca)
 - [ ] Sin empezar — queda para después de tener las fuentes de datos reales funcionando

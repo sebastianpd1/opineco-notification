@@ -163,8 +163,10 @@ Reintenta hasta por 12 horas si el endpoint no responde 2xx, o si no hay respues
 
 ## 3. Correo — GoDaddy con dominio de la empresa
 
-### Confirmado: es el webmail legacy de GoDaddy (no Microsoft 365)
+### Confirmado: es el webmail legacy (no Microsoft 365) — y es cPanel, no la infra propia de GoDaddy
 No hay webhook nativo disponible — descartada la opción de Microsoft Graph API. Único camino viable: **IMAP con IDLE**.
+
+**Host real confirmado:** `opineco.cl` (puerto 993) — **no** `imap.secureserver.net` como se había asumido inicialmente. `imap.secureserver.net` conecta pero rechaza la autenticación (`AUTHENTICATIONFAILED`); el host correcto se encontró en un perfil `.mobileconfig` de Apple Mail que reveló `IncomingMailServerHostName: opineco.cl` — es hosting cPanel (confirmado por el `PayloadIdentifier: cpanel.mail.org...` del perfil), donde el dominio propio funciona directo como host de IMAP/SMTP.
 
 ### Plan de implementación (IMAP + IDLE)
 - Librería recomendada: **`imapflow`** (Node) — soporta IDLE nativamente y tiene mejor manejo de reconexión que `node-imap`.
