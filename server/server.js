@@ -92,11 +92,25 @@ app.post('/api/webhooks/tawk', express.raw({ type: '*/*' }), async (req, res) =>
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
+// El HTML y el service worker nunca se cachean — un sw.js viejo se puede
+// quedar pegado indefinidamente en el navegador/PWA y nunca actualizarse
+// solo (problema clásico de PWAs). Se sirven directo acá, antes de
+// express.static, para que ningún Cache-Control por default los pise.
 app.get('/', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'pantalla-sucursal.html'));
 });
+app.get('/sw.js', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+app.get('/manifest.json', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Si se define HUB_API_KEY, las escrituras (POST/PATCH) requieren el
 // header X-Hub-Key. En local, sin la variable seteada, no se exige.
