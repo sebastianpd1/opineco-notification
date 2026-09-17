@@ -84,7 +84,17 @@ Ver [supabase-schema.md](supabase-schema.md) para el detalle de tablas y [spec-s
 - [x] **Red de seguridad universal**: cualquier alerta de cualquier fuente que lleve más de 24hs sin acuse se cierra sola (`auto:expirado_24h`), corre cada 30 min — cubre los casos donde la señal específica de la integración falle o no llegue
 
 ## 9. PWA + push web (celulares sin TV cerca)
-- [ ] Sin empezar — queda para después de tener las fuentes de datos reales funcionando
+- [x] `manifest.json` + `sw.js` — página instalable, recibe push aunque no esté abierta
+- [x] `server/push.js` — envía vía VAPID a las suscripciones de la sucursal (o broadcast), mismo criterio que las alertas
+- [x] Conectado en los 4 disparadores: Discord, Tawk, correo, venta nueva de ML
+- [x] Endpoints `GET /api/push/vapid-public-key`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe`
+- [x] Botón "Activar notificaciones" en el dashboard
+- [x] Fix iOS Safari: `Notification.requestPermission()` debe ser lo primero al tocar el botón, sin `await` antes (si no, Safari pierde el gesto del usuario y el diálogo no aparece, sin error visible)
+- [x] Fix: HTML/sw.js/manifest.json con `Cache-Control: no-store` — un service worker viejo cacheado nunca se actualiza solo
+- [x] Fix: layout responsive para celular (antes el grid de 2 columnas se salía de la pantalla — faltaba `min-width:0`)
+- [x] Fix: velocidad de los marquees pasó de duración fija (CSS) a píxeles/segundo constantes, calculados según el contenido real — con datos reales (muchos ítems) la duración fija los hacía ilegibles
+- [x] **Confirmado end-to-end en producción**: notificación de prueba real recibida en el celular del dueño del proyecto
+- [x] Botones de demo (simular alerta / limpiar) sacados del dashboard, ya no hacían falta
 
 ## 10. Deploy
 - [x] Repo en GitHub (`sebastianpd1/opineco-notification`), deploy en Railway conectado a ese repo
