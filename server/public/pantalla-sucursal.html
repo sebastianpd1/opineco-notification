@@ -327,11 +327,11 @@
   @keyframes mlScroll{0%{transform:translateX(0);} 100%{transform:translateX(-50%);}}
 
   /* ---------- demo controls ---------- */
-  .demo-controls{
+  .toolbar{
     display:flex; align-items:center; gap:10px;
     font-size:11px; color:rgba(246,243,255,0.5);
   }
-  .demo-controls button{
+  .toolbar button{
     font-size:11px; padding:6px 12px; border-radius:8px;
     border:1px solid var(--panel-line); background:var(--panel);
     color:var(--white); cursor:pointer;
@@ -349,7 +349,7 @@
     .panel{height:260px;}
     .ml-header-wide{flex-wrap:wrap;}
     .ml-header-title{border-right:none; padding-right:0;}
-    .demo-controls{flex-wrap:wrap;}
+    .toolbar{flex-wrap:wrap;}
   }
 </style>
 </head>
@@ -501,10 +501,7 @@
 
   </div>
 
-  <div class="demo-controls">
-    <span>demo:</span>
-    <button onclick="addAlert(nextSample())">+ Simular alerta</button>
-    <button onclick="clearAll()">Limpiar</button>
+  <div class="toolbar">
     <button id="btnPush" onclick="activarPush()" style="display:none">🔔 Activar notificaciones</button>
   </div>
 
@@ -529,34 +526,12 @@
     }
   }
 
-  const samples = [
-    '🔴 Nuevo mensaje en Discord — Bodega Central',
-    '📧 Correo nuevo de Proveedor ABC',
-    '💬 Chat nuevo en Tawk.to — cliente esperando',
-    '🛒 Nueva orden de MercadoLibre — Toner Brother TN-660',
-    '📦 Pedido #1046 listo para retirar — Roberto Díaz'
-  ];
-  let sampleIdx = 0;
-  function nextSample(){
-    const s = samples[sampleIdx % samples.length];
-    sampleIdx++;
-    return s;
-  }
-
   let alerts = [];
 
   async function fetchAlerts(){
     const res = await fetch(`/api/alerts?sucursal=${SUCURSAL}`);
     alerts = await res.json();
     render();
-  }
-  async function addAlert(text){
-    await fetch('/api/alerts', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({source: 'manual', sucursal_id: SUCURSAL, text})
-    });
-    fetchAlerts();
   }
   function ackBody(){
     return {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({acknowledged_by: SUCURSAL})};
