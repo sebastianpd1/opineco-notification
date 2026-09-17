@@ -670,6 +670,16 @@
     return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // Velocidad constante (px/seg) sin importar cuánto contenido haya — antes
+  // la duración era fija en CSS, así que con pocos ítems (mockup) se veía
+  // bien pero con datos reales (muchas ventas/pedidos) quedaba rapidísimo.
+  function ajustarVelocidadMarquee(el, pxPorSeg, vertical){
+    const tamanoTotal = vertical ? el.scrollHeight : el.scrollWidth;
+    const distancia = tamanoTotal / 2; // el contenido está duplicado para el loop sin corte
+    const duracion = Math.max(distancia / pxPorSeg, 6);
+    el.style.animationDuration = duracion + 's';
+  }
+
   async function fetchPedidos(){
     const [retirar, despachar, ventasMl] = await Promise.all([
       fetch(`/api/pedidos/retirar?sucursal=${SUCURSAL}`).then(r => r.json()),
@@ -681,7 +691,9 @@
     const retirarHtml = retirar.map(p =>
       `<div class="order-card"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${p.detalle ? escapeHtml(p.detalle) : new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
     ).join('');
-    document.getElementById('retirarTicker').innerHTML = retirarHtml + retirarHtml;
+    const retirarTicker = document.getElementById('retirarTicker');
+    retirarTicker.innerHTML = retirarHtml + retirarHtml;
+    ajustarVelocidadMarquee(retirarTicker, 20, true);
 
     // FileMaker no tiene una señal de "ya se despachó" para esta tabla — el
     // cierre es manual: tocar la tarjeta la saca de la lista.
@@ -703,7 +715,9 @@
 
     document.getElementById('despacharCount').textContent = `${despachar.length + ventasAtrasadas.length} en ruta`;
     const combinado = despacharHtml + ventasMlHtml;
-    document.getElementById('despacharTicker').innerHTML = combinado + combinado;
+    const despacharTicker = document.getElementById('despacharTicker');
+    despacharTicker.innerHTML = combinado + combinado;
+    ajustarVelocidadMarquee(despacharTicker, 20, true);
   }
 
   async function dismissDespacho(id){
@@ -740,7 +754,9 @@
       const monto = v.monto_total ? `$${Number(v.monto_total).toLocaleString('es-CL')}` : '';
       return `<span>[${escapeHtml(v.cuenta_ml || '—')}] Venta — <b>${escapeHtml(item.titulo || 'Producto')}</b> — ${monto}</span>`;
     }).join('');
-    document.getElementById('mlTrack').innerHTML = items + items;
+    const mlTrack = document.getElementById('mlTrack');
+    mlTrack.innerHTML = items + items;
+    ajustarVelocidadMarquee(mlTrack, 70, false);
   }
 
   // ---- Push web (PWA) — para celulares sin TV cerca ----
@@ -752,11 +768,26 @@
   }
 
   async function activarPush(){
+    // OJO: en Safari/iOS, requestPermission() tiene que ser la PRIMERA cosa
+    // que pasa al tocar el botón, sin ningún await antes — si no, Safari
+    // pierde el "gesto del usuario" y el diálogo de permiso no aparece,
+    // sin ningún error visible (queda como si no hubiera pasado nada).
+    let permiso;
+    try {
+      permiso = await Notification.requestPermission();
+    } catch (err) {
+      alert('Este navegador no puede pedir permiso de notificaciones: ' + err.message);
+      return;
+    }
+    if (permiso !== 'granted') {
+      alert(permiso === 'denied'
+        ? 'Le negaste el permiso de notificaciones a esta app. Para activarlo hay que ir a Configuración del celular y habilitarlo a mano.'
+        : 'No se activaron las notificaciones.');
+      return;
+    }
+
     try {
       const reg = await navigator.serviceWorker.ready;
-      const permiso = await Notification.requestPermission();
-      if (permiso !== 'granted') { alert('Permiso de notificaciones denegado.'); return; }
-
       const { publicKey } = await fetch('/api/push/vapid-public-key').then(r => r.json());
       const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -773,7 +804,7 @@
       document.getElementById('btnPush').disabled = true;
     } catch (err) {
       console.error('No se pudo activar push:', err);
-      alert('No se pudo activar las notificaciones en este navegador.');
+      alert('El permiso se concedió pero falló la suscripción: ' + err.message);
     }
   }
 
