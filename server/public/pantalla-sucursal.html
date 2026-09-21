@@ -517,6 +517,11 @@
   const SUCURSAL = new URLSearchParams(location.search).get('sucursal') || 'providencia';
   let sucursalNombre = SUCURSAL;
 
+  // Los envíos de Mercado Libre se despachan solo desde estas dos sucursales
+  // — el resto de las pantallas no debe mostrar ni el ticker ni las tarjetas.
+  const ML_SUCURSALES_VISIBLES = ['lampa', 'renca'];
+  const mlVisibleAca = ML_SUCURSALES_VISIBLES.includes(SUCURSAL);
+
   async function fetchSucursal(){
     try {
       const res = await fetch(`/api/sucursales/${SUCURSAL}`);
@@ -685,7 +690,9 @@
     // Se cierran solas cuando ML marca el envío como despachado
     // (reconciliación del hub), no hay que tocarlas a mano acá.
     const hoy = new Date().toDateString();
-    const ventasAtrasadas = ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() !== hoy);
+    const ventasAtrasadas = mlVisibleAca
+      ? ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() !== hoy)
+      : [];
     const ventasMlHtml = ventasAtrasadas.map(v => {
       const item = (v.items && v.items[0]) || {};
       return `<div class="order-card ml-card"><div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div><div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div><div class="order-detail">${escapeHtml(v.cliente || '')}</div></div>`;
@@ -718,8 +725,9 @@
   }
 
   async function fetchVentasML(){
-    const ventas = await fetch('/api/ventas-ml').then(r => r.json());
     const widget = document.getElementById('mlWidget');
+    if(!mlVisibleAca){ widget.style.display = 'none'; return; }
+    const ventas = await fetch('/api/ventas-ml').then(r => r.json());
     if(ventas.length === 0){ widget.style.display = 'none'; return; }
     widget.style.display = 'flex';
     document.getElementById('mlBadge').textContent = ventas.length;

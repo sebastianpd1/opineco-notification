@@ -332,6 +332,15 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   res.status(204).end();
 });
 
+// Conveniencia: si alguien configura el kiosko con /<sucursal> en vez de
+// /?sucursal=<sucursal> (pasó con Lampa), redirige en vez de dar 404. Va al
+// final, después de todas las rutas reales y de los estáticos, para no
+// pisar nada.
+app.get('/:posibleSucursal', (req, res, next) => {
+  if (req.params.posibleSucursal.includes('.')) return next(); // ej. favicon.ico
+  res.redirect(302, `/?sucursal=${encodeURIComponent(req.params.posibleSucursal)}`);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Hub escuchando en http://localhost:${PORT}`);
