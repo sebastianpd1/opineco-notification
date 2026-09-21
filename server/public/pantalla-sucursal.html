@@ -816,5 +816,70 @@
   setInterval(fetchVentasML, 30000);
 </script>
 
+<script>
+  // ============================================================
+  // ANTI-SUEÑO: evita que la TV apague/oscurezca la pantalla.
+  // ============================================================
+
+  // Método 1: Wake Lock API (estándar moderno)
+  let wakeLock = null;
+  async function requestWakeLock(){
+    try{
+      if('wakeLock' in navigator){
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          console.log('Wake Lock liberado, reintentando...');
+        });
+        console.log('Wake Lock activo');
+      }
+    }catch(err){
+      console.log('Wake Lock no disponible o falló:', err.message);
+    }
+  }
+  requestWakeLock();
+  document.addEventListener('visibilitychange', () => {
+    if(wakeLock !== null && document.visibilityState === 'visible'){
+      requestWakeLock();
+    }
+  });
+
+  // Método 2 (el que probablemente importe en Vega OS): un video invisible,
+  // silencioso, en loop infinito. Muchos sistemas de TV solo evitan el
+  // protector de pantalla mientras haya reproducción de VIDEO activa.
+  (function keepAliveWithHiddenVideo(){
+    const video = document.createElement('video');
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    video.loop = true;
+    video.autoplay = true;
+    video.style.position = 'fixed';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    video.style.opacity = '0.01';
+    video.style.pointerEvents = 'none';
+    video.style.bottom = '0';
+    video.style.right = '0';
+
+    // Video mp4 mínimo (1 frame negro, silencioso, embebido en base64 —
+    // no depende de ningún archivo externo).
+    video.src = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjIgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0xIHJlZj0zIGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMTMgbWU9aGV4IHN1Ym1lPTcgcHN5PTEgcHN5X3JkPTEuMDA6MC4wMCBtaXhlZF9yZWY9MSBtZV9yYW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTEgOHg4ZGN0PTEgY3FtPTAgZGVhZHpvbmU9MjEsMTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9LTIgdGhyZWFkcz0xIGxvb2thaGVhZF90aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MyBiX3B5cmFtaWQ9MiBiX2FkYXB0PTEgYl9iaWFzPTAgZGlyZWN0PTEgd2VpZ2h0Yj0xIG9wZW5fZ29wPTAgd2VpZ2h0cD0yIGtleWludD0yNTAga2V5aW50X21pbj0xMCBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIQAN//+8f9J5D8AAA==';
+
+    document.body.appendChild(video);
+
+    const tryPlay = () => {
+      video.play().catch(err => {
+        console.log('Reintentando reproducir video keep-alive:', err.message);
+        ['keydown','click','touchstart'].forEach(evt =>
+          document.addEventListener(evt, () => video.play(), {once:true})
+        );
+      });
+    };
+    tryPlay();
+    document.addEventListener('visibilitychange', () => {
+      if(document.visibilityState === 'visible') tryPlay();
+    });
+  })();
+</script>
+
 </body>
 </html>
