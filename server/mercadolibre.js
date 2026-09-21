@@ -97,6 +97,7 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
     shipping_id: String(shippingId),
     shipping_status: shipment.status,
     shipping_substatus: shipment.substatus,
+    tracking_number: shipment.tracking_number || null,
     fecha_compra: order.date_created || null,
     fecha_envio_estimada: fechaEnvioEstimada,
   });
@@ -137,6 +138,7 @@ async function reconciliar(supabase) {
       const update = {
         shipping_status: shipment.status,
         shipping_substatus: shipment.substatus,
+        tracking_number: shipment.tracking_number || null,
       };
       if (ESTADOS_OCULTOS.includes(shipment.status)) {
         update.shipped_at = new Date().toISOString();

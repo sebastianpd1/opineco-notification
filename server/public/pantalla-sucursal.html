@@ -195,7 +195,7 @@
   .seven-days{border-collapse:separate; border-spacing:4px; table-layout:fixed;}
   .day-box{
     background:#3d2d7a; border-radius:8px; padding:8px 6px;
-    height:88px; width:90px; vertical-align:top; border:1px solid transparent;
+    height:92px; width:90px; vertical-align:top; border:1px solid transparent;
   }
   .day-box.today{border-color:#a78bfa;}
   .day-name{font-size:9px; color:#fff; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; text-align:left;}
@@ -264,7 +264,7 @@
     border:1px solid var(--panel-line);
     border-radius:16px;
     padding:18px 20px;
-    height:340px;
+    height:357px;
     min-width:0;
     display:flex;
     flex-direction:column;
@@ -293,8 +293,10 @@
 
   /* Ventas de Mercado Libre pendientes de despacho — amarillo, para
      diferenciarlas de los despachos que vienen de FileMaker (rosa). */
-  .order-card.ml-card{background:rgba(255,230,0,0.08); border-color:rgba(255,230,0,0.3); cursor:default;}
-  .order-card.ml-card .order-id{color:var(--ml);}
+  .order-card.ml-card{background:var(--ml); border-color:var(--ml); cursor:default;}
+  .order-card.ml-card .order-id,
+  .order-card.ml-card .order-who,
+  .order-card.ml-card .order-detail{color:#2D3277;}
 
   .notif-card{background:rgba(255,255,255,0.05); border-left:3px solid var(--pink); border-radius:8px; padding:10px 12px;}
   .notif-from{font-size:12px; font-weight:600; color:var(--pink);}
