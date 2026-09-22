@@ -195,7 +195,7 @@
   .seven-days{border-collapse:separate; border-spacing:4px; table-layout:fixed;}
   .day-box{
     background:#3d2d7a; border-radius:8px; padding:8px 6px;
-    height:92px; width:90px; vertical-align:top; border:1px solid transparent;
+    height:88px; width:90px; vertical-align:top; border:1px solid transparent;
   }
   .day-box.today{border-color:#a78bfa;}
   .day-name{font-size:9px; color:#fff; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; text-align:left;}
@@ -264,7 +264,7 @@
     border:1px solid var(--panel-line);
     border-radius:16px;
     padding:18px 20px;
-    height:357px;
+    height:340px;
     min-width:0;
     display:flex;
     flex-direction:column;
@@ -293,7 +293,16 @@
 
   /* Ventas de Mercado Libre pendientes de despacho — amarillo, para
      diferenciarlas de los despachos que vienen de FileMaker (rosa). */
-  .order-card.ml-card{background:var(--ml); border-color:var(--ml); cursor:default;}
+  .order-card.ml-card{
+    background:var(--ml); border-color:var(--ml); cursor:default;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .estado-badge{
+    flex-shrink:0; padding:4px 9px; border-radius:7px;
+    font-family:'Sora',sans-serif; font-size:10px; font-weight:800;
+    color:#fff; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,0.35);
+  }
   .order-card.ml-card .order-id,
   .order-card.ml-card .order-who,
   .order-card.ml-card .order-detail{color:#2D3277;}
@@ -646,11 +655,47 @@
       bar.appendChild(wrap);
       enableSwipeDismiss(bar, clearAll);
       zone.appendChild(bar);
+
+      // Esta barra usa padding-left:100% + translateX(-100%) (no contenido
+      // duplicado como los otros marquees), así que la distancia real es el
+      // ancho total del track ya renderizado, no la mitad.
+      const distancia = track.offsetWidth;
+      track.style.animationDuration = Math.max(distancia / 55, 6) + 's';
     }
   }
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Colores del badge de estado en las tarjetas de ML — semáforo por etapa:
+  // rojo = recién entrando (nada hecho todavía), ámbar = etiqueta lista/
+  // empaquetando, azul = ya salió/en camino, verde = entregado con éxito,
+  // rojo oscuro = algo salió mal. El substatus manda si existe (más
+  // específico); si no, cae al status de nivel superior.
+  const ESTADO_COLORES = {
+    to_be_agreed: '#FF3B30', pending: '#FF3B30', handling: '#FF3B30',
+    ready_to_ship: '#FF3B30', ready_to_print: '#FF3B30',
+    waiting_for_label_generation: '#FF3B30', invoice_pending: '#FF3B30', on_hold: '#FF3B30',
+
+    printed: '#B45309', ready_to_pack: '#B45309', packed: '#B45309',
+    in_pickup_list: '#B45309', ready_for_pickup: '#B45309', ready_for_dropoff: '#B45309',
+    in_warehouse: '#B45309', in_hub: '#B45309', measures_ready: '#B45309',
+
+    picked_up: '#2563EB', dropped_off: '#2563EB', in_transit: '#2563EB',
+    on_route_to_pickup: '#2563EB', picking_up: '#2563EB', looking_for_driver: '#2563EB',
+
+    shipped: '#22C35E', delivered: '#15803D',
+
+    not_delivered: '#991B1B', cancelled: '#991B1B', error: '#991B1B',
+    delayed: '#991B1B', stale: '#991B1B', stale_ready_to_ship: '#991B1B', stale_shipped: '#991B1B',
+  };
+  function estadoBadgeHtml(status, substatus){
+    const clave = substatus || status;
+    if(!clave) return '';
+    const color = ESTADO_COLORES[clave] || '#4B5563';
+    const texto = clave.replace(/_/g, ' ');
+    return `<span class="estado-badge" style="background:${color}">${escapeHtml(texto)}</span>`;
   }
 
   // Velocidad constante (px/seg) sin importar cuánto contenido haya — antes
@@ -695,7 +740,14 @@
       : [];
     const ventasMlHtml = ventasAtrasadas.map(v => {
       const item = (v.items && v.items[0]) || {};
-      return `<div class="order-card ml-card"><div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div><div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div><div class="order-detail">${escapeHtml(v.cliente || '')}</div></div>`;
+      return `<div class="order-card ml-card">
+        <div style="min-width:0;">
+          <div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div>
+          <div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div>
+          <div class="order-detail">${escapeHtml(v.cliente || '')}</div>
+        </div>
+        ${estadoBadgeHtml(v.shipping_status, v.shipping_substatus)}
+      </div>`;
     }).join('');
 
     document.getElementById('despacharCount').textContent = `${despachar.length + ventasAtrasadas.length} en ruta`;
@@ -742,7 +794,7 @@
     }).join('');
     const mlTrack = document.getElementById('mlTrack');
     mlTrack.innerHTML = items + items;
-    ajustarVelocidadMarquee(mlTrack, 70, false);
+    ajustarVelocidadMarquee(mlTrack, 40, false);
   }
 
   // ---- Push web (PWA) — para celulares sin TV cerca ----
