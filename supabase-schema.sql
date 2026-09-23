@@ -82,6 +82,13 @@ on conflict (id) do nothing;
 -- consulta cada courier por su cuenta, acá solo se guarda el resultado.
 alter table pedidos_despachar add column if not exists estado_envio text;
 
+-- Ventas de ML "acordar con el vendedor" (shipping.id viene null — no hay
+-- despacho de ML, hay que coordinar el retiro directo con el comprador) no
+-- se pueden asignar a una sucursal concreta, así que sucursal_id pasa a ser
+-- opcional: null = solo visible en /todas, no en la TV de una sucursal
+-- puntual. Ver server/mercadolibre.js.
+alter table pedidos_retirar alter column sucursal_id drop not null;
+
 -- Medio de envío de Mercado Libre (FLEX / MERCADO LIBRE / BLUEXPRESS) —
 -- se calcula solo en server/mercadolibre.js a partir de logistic_type y
 -- tracking_method del shipment, mismo criterio que ya tenían en FileMaker.

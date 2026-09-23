@@ -101,7 +101,26 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   const order = await orderRes.json();
 
   const shippingId = order?.shipping?.id;
-  if (!shippingId) return { guardado: false, motivo: 'sin shipping.id' };
+
+  // "Acordar con el vendedor": no es un carrito, no hay envío de ML — el
+  // shipping.id viene null directamente (ya no llega status "to_be_agreed").
+  // Es la pauta de ML de que hay que coordinar el retiro a mano con el
+  // comprador, así que va a Pedidos a Retirar en vez de al tracking de ML.
+  // Sin sucursal_id porque no hay forma de saber a cuál corresponde — queda
+  // visible solo en /todas (ver couriers... eh, ver supabase-schema.sql).
+  if (!shippingId) {
+    const itemsAcordar = (order.order_items || []).map((oi) => oi.item?.title || '').filter(Boolean);
+    const detalle = `ML ${cuentaNombre} — acordar con el comprador (${itemsAcordar[0] || 'producto'})`;
+    const { error } = await supabase.from('pedidos_retirar').upsert({
+      id: `ML-${order.id}`,
+      sucursal_id: null,
+      cliente: order.buyer?.nickname || 'Comprador Mercado Libre',
+      detalle,
+    });
+    if (error) throw error;
+    enviarPush(supabase, null, { title: 'Mercado Libre', body: detalle, url: '/todas' }).catch(() => {});
+    return { guardado: true, tipo: 'retiro_acordado' };
+  }
 
   const shipment = await obtenerShipment(shippingId, token);
 

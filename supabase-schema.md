@@ -22,8 +22,8 @@ Cola en vivo, **sin historial**: FileMaker inserta una fila cuando un pedido que
 
 | Columna | Tipo | Notas |
 |---|---|---|
-| `id` | `text` PK | id del pedido en FileMaker (recno o campo de pedido) |
-| `sucursal_id` | `text` FK → `sucursales.id` | |
+| `id` | `text` PK | id del pedido en FileMaker (recno o campo de pedido), o `ML-<order_id>` para los que vienen de Mercado Libre |
+| `sucursal_id` | `text` FK → `sucursales.id`, nullable | `null` = no se sabe la sucursal (caso "acordar con el comprador" de ML) — solo visible en `/todas`, no en la TV de ninguna sucursal puntual |
 | `cliente` | `text` | |
 | `detalle` | `text` | descripción del pedido |
 | `created_at` | `timestamptz` default `now()` | |

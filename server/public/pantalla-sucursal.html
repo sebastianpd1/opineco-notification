@@ -276,12 +276,12 @@
   /* Cada panel con su propio color de fondo, para distinguirlos de un
      vistazo (mismo criterio que las tarjetas de courier). */
   .panel-despachar{
-    background:rgba(240,41,157,0.12);
-    border-color:rgba(240,41,157,0.35);
+    background:rgba(240,41,157,0.24);
+    border-color:rgba(240,41,157,0.6);
   }
   .panel-enviados{
-    background:rgba(34,195,94,0.14);
-    border-color:rgba(34,195,94,0.4);
+    background:rgba(21,163,74,0.30);
+    border-color:rgba(21,163,74,0.65);
   }
   .panel-head{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
   .panel-head svg{width:20px;height:20px; flex-shrink:0;}
@@ -299,7 +299,7 @@
   @keyframes scrollUp{0%{transform:translateY(0);} 100%{transform:translateY(-50%);}}
 
   .order-card{background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09); border-radius:10px; padding:10px 12px;}
-  #despacharTicker .order-card{cursor:pointer;}
+  #despacharTicker .order-card, #retirarTicker .order-card{cursor:pointer;}
   .order-id{font-family:'Sora',sans-serif; font-size:13px; font-weight:600; color:var(--pink);}
   .order-who{font-size:14px; font-weight:600; margin-top:2px;}
   .order-detail{font-size:12px; color:var(--dim); margin-top:2px;}
@@ -882,7 +882,7 @@
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
     const retirarHtml = retirar.map(p =>
-      `<div class="order-card"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaCreacionHtml(p.created_at)}</div>`
+      `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaCreacionHtml(p.created_at)}</div>`
     ).join('');
     const retirarTicker = document.getElementById('retirarTicker');
     retirarTicker.innerHTML = retirarHtml + retirarHtml;
@@ -964,6 +964,18 @@
   document.getElementById('despacharTicker').addEventListener('click', (e) => {
     const card = e.target.closest('.order-card');
     if(card && card.dataset.id) dismissDespacho(card.dataset.id);
+  });
+
+  // FileMaker cierra solo los retiros que él mismo creó (firma digital), pero
+  // los que llegan directo de ML ("acordar con el comprador") no tienen esa
+  // señal — necesitan poder cerrarse a mano tocando la tarjeta.
+  async function dismissRetiro(id){
+    await fetch(`/api/pedidos/retirar/${encodeURIComponent(id)}`, {method: 'DELETE'});
+    fetchPedidos();
+  }
+  document.getElementById('retirarTicker').addEventListener('click', (e) => {
+    const card = e.target.closest('.order-card');
+    if(card && card.dataset.id) dismissRetiro(card.dataset.id);
   });
 
   async function fetchBadgeCounts(){
