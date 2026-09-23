@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
-const { startMercadoLibrePoller, ESTADOS_ENVIADOS: ML_ESTADOS_ENVIADOS, ESTADOS_FINALES: ML_ESTADOS_FINALES } = require('./mercadolibre');
+const { startMercadoLibrePoller, clasificarVenta } = require('./mercadolibre');
 const { enviarPush } = require('./push');
 const { clasificarEnvio } = require('./couriers');
 
@@ -321,17 +321,17 @@ app.delete('/api/pedidos/despachar/:id', requireApiKey, async (req, res) => {
 // ---------- Ventas Mercado Libre ----------
 // Solo las pendientes (ver investigacion-integraciones.md §1.1) — las
 // "enviadas" viven en GET /api/envios-en-transito, las finales no se
-// muestran en ningún lado.
-const ML_NO_PENDIENTE = [...ML_ESTADOS_ENVIADOS, ...ML_ESTADOS_FINALES];
-
+// muestran en ningún lado. La clasificación mira status Y substatus (ver
+// mercadolibre.js) porque el status de nivel superior a veces tarda en
+// reflejar que el paquete ya salió.
 app.get('/api/ventas-ml', async (req, res) => {
   const { data, error } = await supabase
     .from('ventas_mercadolibre')
     .select('*')
-    .not('shipping_status', 'in', `(${ML_NO_PENDIENTE.join(',')})`)
     .order('created_at', { ascending: false });
   if (error) return handleSupabaseError(res, error);
-  res.json(data);
+  const pendientes = data.filter((v) => clasificarVenta(v.shipping_status, v.shipping_substatus) === 'pendiente');
+  res.json(pendientes);
 });
 
 // ---------- Envíos en tránsito (widget 3: ML + despachos de courier) ----------
@@ -345,7 +345,7 @@ app.get('/api/envios-en-transito', async (req, res) => {
 
   const [despachoRes, ventasRes] = await Promise.all([
     despachoQuery,
-    supabase.from('ventas_mercadolibre').select('*').in('shipping_status', ML_ESTADOS_ENVIADOS),
+    supabase.from('ventas_mercadolibre').select('*'),
   ]);
   if (despachoRes.error) return handleSupabaseError(res, despachoRes.error);
   if (ventasRes.error) return handleSupabaseError(res, ventasRes.error);
@@ -362,17 +362,19 @@ app.get('/api/envios-en-transito', async (req, res) => {
       sucursal_id: p.sucursal_id,
     }));
 
-  const ventasEnTransito = ventasRes.data.map((v) => ({
-    source: 'ML',
-    id: v.order_id,
-    medio_envio: v.medio_envio,
-    fecha: v.fecha_compra,
-    cliente: v.cliente,
-    detalle: (v.items && v.items[0]?.titulo) || v.cuenta_ml,
-    cuenta_ml: v.cuenta_ml,
-    estado_status: v.shipping_status,
-    estado_substatus: v.shipping_substatus,
-  }));
+  const ventasEnTransito = ventasRes.data
+    .filter((v) => clasificarVenta(v.shipping_status, v.shipping_substatus) === 'en_transito')
+    .map((v) => ({
+      source: 'ML',
+      id: v.order_id,
+      medio_envio: v.medio_envio,
+      fecha: v.fecha_compra,
+      cliente: v.cliente,
+      detalle: (v.items && v.items[0]?.titulo) || v.cuenta_ml,
+      cuenta_ml: v.cuenta_ml,
+      estado_status: v.shipping_status,
+      estado_substatus: v.shipping_substatus,
+    }));
 
   res.json([...despachosEnTransito, ...ventasEnTransito]);
 });

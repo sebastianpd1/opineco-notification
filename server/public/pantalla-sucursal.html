@@ -273,8 +273,12 @@
     flex-direction:column;
     backdrop-filter:blur(6px);
   }
-  /* Enviados — mismo molde de panel, pero con su propio color para
-     distinguirlo de un vistazo de Retirar/Despachar. */
+  /* Cada panel con su propio color de fondo, para distinguirlos de un
+     vistazo (mismo criterio que las tarjetas de courier). */
+  .panel-despachar{
+    background:rgba(240,41,157,0.12);
+    border-color:rgba(240,41,157,0.35);
+  }
   .panel-enviados{
     background:rgba(34,195,94,0.14);
     border-color:rgba(34,195,94,0.4);
@@ -531,7 +535,7 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel panel-despachar">
       <div class="panel-head">
         <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="11" height="9" rx="1.2" stroke="#F0299D" stroke-width="1.4"/><path d="M14 10h3.3L20 13v3h-6v-6Z" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="1.4" stroke="#F0299D" stroke-width="1.3"/><circle cx="16.5" cy="17.5" r="1.4" stroke="#F0299D" stroke-width="1.3"/></svg>
         <div class="panel-title">Pedidos a Despachar</div>
@@ -758,12 +762,46 @@
     not_delivered: '#991B1B', cancelled: '#991B1B', error: '#991B1B',
     delayed: '#991B1B', stale: '#991B1B', stale_ready_to_ship: '#991B1B', stale_shipped: '#991B1B',
   };
+  // Traducción — los valores crudos de la API de ML vienen en inglés
+  // (in_hub, out_for_delivery, etc.), pero en pantalla tienen que verse en
+  // español, claros para cualquiera que los lea en la sucursal.
+  const ESTADO_TEXTOS = {
+    to_be_agreed: 'por coordinar', pending: 'pendiente', handling: 'en preparación',
+    ready_to_ship: 'listo para enviar', ready_to_print: 'etiqueta por imprimir',
+    waiting_for_label_generation: 'generando etiqueta', invoice_pending: 'factura pendiente', on_hold: 'en espera',
+
+    printed: 'etiqueta impresa', ready_to_pack: 'por embalar', packed: 'embalado',
+    in_pickup_list: 'en lista de retiro', ready_for_pickup: 'listo para retiro', ready_for_dropoff: 'listo para entrega a courier',
+    in_warehouse: 'en bodega', in_hub: 'en centro de distribución', measures_ready: 'medidas listas',
+
+    picked_up: 'retirado', dropped_off: 'entregado al courier', in_transit: 'en tránsito',
+    on_route_to_pickup: 'courier en camino a retirar', picking_up: 'retirando', looking_for_driver: 'buscando repartidor',
+    out_for_delivery: 'en reparto',
+
+    shipped: 'enviado', delivered: 'entregado',
+
+    not_delivered: 'no entregado', cancelled: 'cancelado', error: 'con error',
+    delayed: 'retrasado', stale: 'sin novedades', stale_ready_to_ship: 'atascado sin enviar', stale_shipped: 'atascado sin confirmar entrega',
+  };
   function estadoBadgeHtml(status, substatus){
     const clave = substatus || status;
     if(!clave) return '';
     const color = ESTADO_COLORES[clave] || '#4B5563';
-    const texto = clave.replace(/_/g, ' ');
+    const texto = ESTADO_TEXTOS[clave] || clave.replace(/_/g, ' ');
     return `<span class="estado-badge" style="background:${color}">${escapeHtml(texto)}</span>`;
+  }
+
+  // Textos de los couriers de despacho — Starken/Rappi ya vienen en español
+  // pero con formato raro (mayúsculas pegadas, PascalCase); Blue Express
+  // manda códigos de 2-3 letras que nadie entiende sin la tabla a mano.
+  const COURIER_TEXTOS = {
+    STARKEN: { 'EN ORIGEN': 'En origen', 'EN CD': 'En centro de distribución', 'EN TRANSITO': 'En tránsito', 'EN DESTINO': 'En destino', 'ENTREGADO': 'Entregado' },
+    RAPPI: { ProcesandoPedido: 'Procesando pedido', Colectado: 'Colectado', EnCaminoARetirar: 'Courier en camino a retirar', Retirado: 'Retirado', Entregado: 'Entregado' },
+    BLUE: { GE: 'Aviso de envío recibido', PUO: 'Admitido en punto Blue', ASO: 'Retirado', PUH: 'En centro de distribución', IC: 'Traslado interregional', DA: 'En centro de distribución destino', LD: 'En reparto', DL: 'Entregado' },
+  };
+  function textoEstadoCourier(source, estado){
+    if(!estado) return '';
+    return (COURIER_TEXTOS[source] && COURIER_TEXTOS[source][estado]) || estado.replace(/_/g, ' ');
   }
 
   // Medio de envío de Mercado Libre — lo calcula el hub (logistic_type +
@@ -776,11 +814,12 @@
     return `<span class="estado-badge" style="background:${color}">${escapeHtml(medio)}</span>`;
   }
 
-  // Fecha de ingreso, clara y en español — se usa en todos los widgets.
-  function fechaIngresoHtml(fechaIso){
+  // Fecha de creación (no de cuándo entró al estado actual), clara y en
+  // español — se usa en todos los widgets.
+  function fechaCreacionHtml(fechaIso){
     if(!fechaIso) return '';
     const texto = new Date(fechaIso).toLocaleDateString('es-CL', { day: 'numeric', month: 'long' });
-    return `<div class="order-date">Ingresó el ${texto}</div>`;
+    return `<div class="order-date">Creado el ${texto}</div>`;
   }
 
   // Solo se muestra en la vista "todas" — si no, no hace falta aclarar de
@@ -843,7 +882,7 @@
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
     const retirarHtml = retirar.map(p =>
-      `<div class="order-card"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaIngresoHtml(p.created_at)}</div>`
+      `<div class="order-card"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaCreacionHtml(p.created_at)}</div>`
     ).join('');
     const retirarTicker = document.getElementById('retirarTicker');
     retirarTicker.innerHTML = retirarHtml + retirarHtml;
@@ -859,17 +898,14 @@
       sucursal_id: p.sucursal_id,
     }));
 
-    // Ventas de ML que ya cruzaron a un día distinto del de la compra y
-    // siguen sin despacharse (atrasadas) — recién ahí bajan a este panel.
-    // Mientras es el mismo día, solo aparecen en el ticker de arriba.
-    // Se cierran solas cuando ML marca el envío como despachado
-    // (reconciliación del hub), no hay que tocarlas a mano acá.
-    const hoy = new Date().toDateString();
-    const ventasAtrasadas = mlVisibleAca
-      ? ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() !== hoy)
-      : [];
+    // Todas las ventas de ML pendientes (no solo las atrasadas de días
+    // anteriores) — el ticker de arriba es solo el anuncio de "venta nueva",
+    // este panel es la cola real de qué falta despachar. Se cierran solas
+    // cuando ML marca el envío como en tránsito (reconciliación del hub),
+    // no hay que tocarlas a mano acá.
+    const ventasPendientesDespacho = mlVisibleAca ? ventasMl : [];
 
-    const despacharOrdenado = ordenarPorFuente([...despacharItems, ...ventasAtrasadas.map(v => ({...v, source: 'ML'}))]);
+    const despacharOrdenado = ordenarPorFuente([...despacharItems, ...ventasPendientesDespacho.map(v => ({...v, source: 'ML'}))]);
     const despacharHtmlAll = despacharOrdenado.map(item => {
       if(item.source === 'ML'){
         const it = (item.items && item.items[0]) || {};
@@ -878,7 +914,7 @@
             <div class="order-id">ML #${escapeHtml(item.order_id)} — ${escapeHtml(item.cuenta_ml)}</div>
             <div class="order-who">${escapeHtml(it.titulo || 'Producto')}</div>
             <div class="order-detail">${escapeHtml(item.cliente || '')}</div>
-            ${fechaIngresoHtml(item.fecha_compra)}
+            ${fechaCreacionHtml(item.fecha_compra)}
           </div>
           <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
             ${medioEnvioBadgeHtml(item.medio_envio)}
@@ -886,10 +922,10 @@
           </div>
         </div>`;
       }
-      return `<div class="order-card ${claseFuente(item.source)}" data-id="${escapeHtml(item.id)}"><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div>${sucursalTagHtml(item.sucursal_id)}${fechaIngresoHtml(item.created_at)}</div>`;
+      return `<div class="order-card ${claseFuente(item.source)}" data-id="${escapeHtml(item.id)}"><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div>${sucursalTagHtml(item.sucursal_id)}${fechaCreacionHtml(item.created_at)}</div>`;
     }).join('');
 
-    document.getElementById('despacharCount').textContent = `${despachar.length + ventasAtrasadas.length} en ruta`;
+    document.getElementById('despacharCount').textContent = `${despachar.length + ventasPendientesDespacho.length} en ruta`;
     const despacharTicker = document.getElementById('despacharTicker');
     despacharTicker.innerHTML = despacharHtmlAll + despacharHtmlAll;
     ajustarVelocidadMarquee(despacharTicker, 20, true);
@@ -901,14 +937,14 @@
     enviadosPanel.style.display = enviadosOrdenados.length ? 'flex' : 'none';
     document.getElementById('enviadosCount').textContent = `${enviadosOrdenados.length} en camino`;
     const enviadosHtml = enviadosOrdenados.map(e => {
-      const estadoTexto = e.source === 'ML' ? estadoBadgeHtml(e.estado_status, e.estado_substatus) : `<span class="estado-badge" style="background:rgba(255,255,255,0.25)">${escapeHtml((e.estado_texto || '').replace(/_/g, ' '))}</span>`;
+      const estadoTexto = e.source === 'ML' ? estadoBadgeHtml(e.estado_status, e.estado_substatus) : `<span class="estado-badge" style="background:rgba(255,255,255,0.25)">${escapeHtml(textoEstadoCourier(e.source, e.estado_texto))}</span>`;
       return `<div class="order-card ${claseFuente(e.source)}" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <div style="min-width:0;">
           <div class="order-id">${escapeHtml(e.source)} #${escapeHtml(String(e.id))}</div>
           <div class="order-who">${escapeHtml(e.cliente || '')}</div>
           <div class="order-detail">${escapeHtml(e.detalle || '')}</div>
           ${sucursalTagHtml(e.sucursal_id)}
-          ${fechaIngresoHtml(e.fecha)}
+          ${fechaCreacionHtml(e.fecha)}
         </div>
         <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
           ${e.source === 'ML' ? medioEnvioBadgeHtml(e.medio_envio) : ''}

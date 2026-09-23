@@ -22,6 +22,22 @@ const SUBSTATUS_FILTER = process.env.ML_SUBSTATUS_FILTER || 'ready_to_print';
 const ESTADOS_ENVIADOS = ['shipped', 'not_delivered', 'stale_shipped'];
 const ESTADOS_FINALES = ['delivered', 'cancelled', 'closed', 'error'];
 
+// El `status` de nivel superior a veces tarda en pasar a "shipped" aunque el
+// paquete YA salió físicamente de la sucursal — el `substatus` sí lo refleja
+// al toque. Sin esto, pedidos que ya están en tránsito seguían apareciendo
+// como pendientes en vez de en el widget "Enviados".
+const SUBESTADOS_ENVIADOS = [
+  'picked_up', 'dropped_off', 'in_transit',
+  'on_route_to_pickup', 'picking_up', 'looking_for_driver',
+  'in_hub',
+];
+
+function clasificarVenta(status, substatus) {
+  if (ESTADOS_FINALES.includes(status)) return 'final';
+  if (ESTADOS_ENVIADOS.includes(status) || SUBESTADOS_ENVIADOS.includes(substatus)) return 'en_transito';
+  return 'pendiente';
+}
+
 // seller_id -> nombre de cuenta y campo Token en VARIABLESCONFIG.
 const CUENTAS = {
   2914177676: { nombre: 'CUENTA4', tokenField: 'Token4' },
@@ -160,7 +176,7 @@ async function reconciliar(supabase) {
       };
       // shipped_at marca cuándo entró al balde "enviada" — se setea una sola
       // vez, la primera vez que se detecta (no en cada reconciliación).
-      if (!venta.shipped_at && ESTADOS_ENVIADOS.includes(shipment.status)) {
+      if (!venta.shipped_at && clasificarVenta(shipment.status, shipment.substatus) === 'en_transito') {
         update.shipped_at = new Date().toISOString();
       }
       const { error } = await supabase.from('ventas_mercadolibre').update(update).eq('order_id', venta.order_id);
@@ -228,4 +244,4 @@ function startMercadoLibrePoller(supabase) {
   console.log(`Poller de Mercado Libre activo (cada ${POLL_MS / 1000}s, reconciliación cada ${RECONCILE_MS / 1000}s, filtrando substatus=${SUBSTATUS_FILTER})`);
 }
 
-module.exports = { startMercadoLibrePoller, ESTADOS_ENVIADOS, ESTADOS_FINALES };
+module.exports = { startMercadoLibrePoller, clasificarVenta };
