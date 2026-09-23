@@ -25,6 +25,14 @@ self.addEventListener('push', (event) => {
       data: { url: data.url || '/' },
     })
   );
+
+  // Ícono del dock/taskbar (Badging API) — para que se note aunque la app
+  // esté cerrada. Sin la app abierta no sabemos el total real de
+  // pendientes, así que acá solo marca "hay algo nuevo" (sin número); el
+  // número exacto lo pone pantalla-sucursal.html apenas la app se abre.
+  if ('setAppBadge' in self.navigator) {
+    event.waitUntil(self.navigator.setAppBadge().catch(() => {}));
+  }
 });
 
 self.addEventListener('notificationclick', (event) => {

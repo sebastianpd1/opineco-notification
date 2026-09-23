@@ -160,12 +160,17 @@ app.get('/api/sucursales/:id', async (req, res) => {
 
 // ---------- Alertas (tabla notificaciones_sucursal) ----------
 // sucursal_id null = broadcast a todas las pantallas.
+// El correo queda afuera de este banner a propósito: es de alto volumen y
+// poco accionable para la sucursal, así que solo suma en el ícono con
+// burbuja del header (GET /api/alerts/counts) — el banner rojo es para
+// Discord/Tawk/manual, cosas puntuales que sí ameritan una alerta grande.
 app.get('/api/alerts', async (req, res) => {
   const { sucursal } = req.query;
   let query = supabase
     .from('notificaciones_sucursal')
     .select('*')
     .is('acknowledged_at', null)
+    .neq('source', 'correo')
     .order('created_at', { ascending: true });
   if (sucursal) query = query.or(`sucursal_id.eq.${sucursal},sucursal_id.is.null`);
 
@@ -353,11 +358,15 @@ app.get('/api/envios-en-transito', async (req, res) => {
       cliente: p.cliente,
       detalle: p.destino || p.detalle || '',
       estado_texto: p.estado_envio,
+      fecha: p.created_at,
+      sucursal_id: p.sucursal_id,
     }));
 
   const ventasEnTransito = ventasRes.data.map((v) => ({
     source: 'ML',
     id: v.order_id,
+    medio_envio: v.medio_envio,
+    fecha: v.fecha_compra,
     cliente: v.cliente,
     detalle: (v.items && v.items[0]?.titulo) || v.cuenta_ml,
     cuenta_ml: v.cuenta_ml,

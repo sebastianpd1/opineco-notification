@@ -81,3 +81,8 @@ on conflict (id) do nothing;
 -- filemaker-scripts.md §5 y server/couriers.js para el detalle. FileMaker ya
 -- consulta cada courier por su cuenta, acá solo se guarda el resultado.
 alter table pedidos_despachar add column if not exists estado_envio text;
+
+-- Medio de envío de Mercado Libre (FLEX / MERCADO LIBRE / BLUEXPRESS) —
+-- se calcula solo en server/mercadolibre.js a partir de logistic_type y
+-- tracking_method del shipment, mismo criterio que ya tenían en FileMaker.
+alter table ventas_mercadolibre add column if not exists medio_envio text;

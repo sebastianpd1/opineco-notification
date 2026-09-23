@@ -65,6 +65,18 @@ async function obtenerShipment(shippingId, token) {
   return res.json();
 }
 
+// Mismo criterio que ya tenían programado en FileMaker (Case sobre
+// logistic_type/tracking_method) — se replica acá tal cual para no
+// duplicar lógica entre los dos sistemas más de lo necesario.
+function medioEnvioMl(shipment) {
+  const tipo = shipment.logistic_type;
+  const metodo = shipment.tracking_method;
+  if (tipo === 'self_service') return 'FLEX';
+  if (tipo === 'xd_drop_off' && metodo === 'MEL Distribution') return 'MERCADO LIBRE';
+  if (tipo === 'xd_drop_off' && metodo !== 'MEL Distribution') return 'BLUEXPRESS';
+  return null;
+}
+
 async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   const orderRes = await fetch(`https://api.mercadolibre.com/orders/${event.order_id}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -101,6 +113,7 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
     shipping_status: shipment.status,
     shipping_substatus: shipment.substatus,
     tracking_number: shipment.tracking_number || null,
+    medio_envio: medioEnvioMl(shipment),
     fecha_compra: order.date_created || null,
     fecha_envio_estimada: fechaEnvioEstimada,
   });
@@ -143,6 +156,7 @@ async function reconciliar(supabase) {
         shipping_status: shipment.status,
         shipping_substatus: shipment.substatus,
         tracking_number: shipment.tracking_number || null,
+        medio_envio: medioEnvioMl(shipment),
       };
       // shipped_at marca cuándo entró al balde "enviada" — se setea una sola
       // vez, la primera vez que se detecta (no en cada reconciliación).
