@@ -39,6 +39,25 @@ async function limpiarAlertasVencidas() {
 limpiarAlertasVencidas();
 setInterval(limpiarAlertasVencidas, 30 * 60 * 1000);
 
+// Borra los despachos de courier que ya llegaron a "entregado" — FileMaker
+// solo tiene que mandar el PATCH con el estado crudo (ver couriers.js),
+// el hub decide solo cuándo ya está resuelto y limpia la fila (mismo
+// criterio "sin historial" que ya tenía esta tabla).
+async function limpiarDespachosEntregados() {
+  const { data, error } = await supabase.from('pedidos_despachar').select('id, transportista, estado_envio');
+  if (error) return console.error('Error leyendo pedidos_despachar para limpieza:', error);
+
+  const idsEntregados = data
+    .filter((p) => clasificarEnvio(p.transportista, p.estado_envio) === 'entregado')
+    .map((p) => p.id);
+  if (idsEntregados.length === 0) return;
+
+  const { error: deleteError } = await supabase.from('pedidos_despachar').delete().in('id', idsEntregados);
+  if (deleteError) console.error('Error limpiando despachos entregados:', deleteError);
+}
+limpiarDespachosEntregados();
+setInterval(limpiarDespachosEntregados, 10 * 60 * 1000);
+
 const app = express();
 
 // Webhook de Tawk.to: va ANTES de express.json() porque necesitamos el body

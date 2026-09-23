@@ -95,7 +95,7 @@ Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
 
 `$estado` es la misma variable que ya arma cada script (texto de Starken, `EstadoNombre` de Rappi, o `title` de Blue Express) — se manda tal cual, sin traducir nada; la traducción a "pendiente / en tránsito / entregado" la hace el hub (`server/couriers.js`).
 
-**Cuándo borrar de verdad:** cuando ese mismo script detecte que el estado es un final (`ENTREGADO` / `Entregado` / `DL`), agregar el mismo bloque `DELETE` que antes estaba en la sección 2 (mismo `id=eq.$venta_id`) — recién ahí el pedido sale de Supabase para siempre, consistente con el criterio "sin historial" de esta tabla.
+**El `DELETE` final ya NO va en FileMaker:** el hub corre un job cada 10 minutos que revisa `pedidos_despachar`, detecta solo qué filas llegaron a un estado final (`ENTREGADO` / `Entregado` / `DL`) y las borra — FileMaker no necesita agregar ninguna lógica de borrado, solo mandar el `PATCH` de arriba cada vez que consulta el estado.
 
 ---
 
