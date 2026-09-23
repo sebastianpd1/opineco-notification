@@ -6,16 +6,18 @@
 // Ver conversación con el cliente para el diccionario de estados de cada
 // courier (Starken en español largo, Rappi en PascalCase, Blue en códigos
 // de 2-3 letras).
+// Los valores de `transportista` los manda FileMaker tal cual — confirmado
+// que llegan en mayúsculas: STARKEN, RAPPI, BLUE (no "BlueExpress").
 const COURIER_ESTADOS = {
-  Starken: {
+  STARKEN: {
     en_transito: ['EN CD', 'EN TRANSITO', 'EN DESTINO'],
     entregado: ['ENTREGADO'],
   },
-  Rappi: {
+  RAPPI: {
     en_transito: ['Retirado'],
     entregado: ['Entregado'],
   },
-  BlueExpress: {
+  BLUE: {
     en_transito: ['ASO', 'PUH', 'IC', 'DA', 'LD'],
     entregado: ['DL'],
   },

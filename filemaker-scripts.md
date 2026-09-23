@@ -63,7 +63,7 @@ Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
         "--header \"Content-Type: application/json\" " &
         "--data " & Quote (
             JSONSetElement ( "{}" ;
-                [ "transportista" ; "Starken" ; JSONString ]  // o "Rappi" / "BlueExpress", según corresponda a esta rama del script
+                [ "transportista" ; $transporte ; JSONString ]  // "STARKEN" / "RAPPI" / "BLUE", tal cual lo maneja FileMaker hoy
             )
         ) & " " &
         "--max-time 10"

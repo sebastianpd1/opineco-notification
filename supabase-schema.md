@@ -46,7 +46,7 @@ Misma lógica que retirar (cola en vivo, sin historial), con destino y transport
 | `sucursal_id` | `text` FK → `sucursales.id` | sucursal de origen del despacho |
 | `destino` | `text` | ej. "Bolivia", "Valparaíso" |
 | `detalle` | `text` | |
-| `transportista` | `text` nullable | `Starken` \| `Rappi` \| `BlueExpress` (debe matchear exacto — ver `server/couriers.js`) |
+| `transportista` | `text` nullable | `STARKEN` \| `RAPPI` \| `BLUE` (mayúsculas exactas — ver `server/couriers.js`) |
 | `estado_envio` | `text` nullable | estado crudo tal cual lo entrega la API del courier (ej. `EN TRANSITO`, `Retirado`, `LD`) — FileMaker ya lo consulta por su cuenta, acá solo se guarda |
 | `created_at` | `timestamptz` default `now()` | |
 

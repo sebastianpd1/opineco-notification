@@ -742,12 +742,12 @@
   // Un color de tarjeta por fuente — se usa en cualquier widget que mezcle
   // despachos de distintos couriers/ML, para reconocer de un vistazo quién
   // es sin leer texto. El orden también define cómo se agrupan al ordenar.
-  const FUENTE_ORDEN = ['Starken', 'Rappi', 'BlueExpress', 'ML'];
+  const FUENTE_ORDEN = ['STARKEN', 'RAPPI', 'BLUE', 'ML'];
   function claseFuente(source){
     if(source === 'ML') return 'ml-card';
-    if(source === 'Starken') return 'starken-card';
-    if(source === 'Rappi') return 'rappi-card';
-    if(source === 'BlueExpress') return 'blue-card';
+    if(source === 'STARKEN') return 'starken-card';
+    if(source === 'RAPPI') return 'rappi-card';
+    if(source === 'BLUE') return 'blue-card';
     return '';
   }
   function ordenarPorFuente(items){
