@@ -15,9 +15,12 @@ const POLL_MS = Number(process.env.ML_POLL_MS || 60000);
 const RECONCILE_MS = Number(process.env.ML_RECONCILE_MS || 5 * 60000);
 const SUBSTATUS_FILTER = process.env.ML_SUBSTATUS_FILTER || 'ready_to_print';
 
-// Una vez que el status de nivel superior llega a alguno de estos, la venta
-// se oculta del widget (GET /api/ventas-ml la filtra por esto).
-const ESTADOS_OCULTOS = ['shipped', 'delivered', 'not_delivered', 'cancelled', 'closed', 'error', 'stale_shipped'];
+// 3 baldes, igual que los despachos de courier (ver couriers.js):
+// pendiente (nada de esto, es el default) -> enviada (ya salió, esperando
+// que ML confirme entrega — antes se ocultaba acá directo, ahora pasa al
+// widget "Enviados") -> final (se deja de trackear del todo).
+const ESTADOS_ENVIADOS = ['shipped', 'not_delivered', 'stale_shipped'];
+const ESTADOS_FINALES = ['delivered', 'cancelled', 'closed', 'error'];
 
 // seller_id -> nombre de cuenta y campo Token en VARIABLESCONFIG.
 const CUENTAS = {
@@ -109,14 +112,15 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   return { guardado: true };
 }
 
-// Revisa las ventas que todavía están visibles y actualiza su estado real —
-// sin esto, una venta nunca se enteraría de que ya se despachó y quedaría
-// pegada en el widget para siempre.
+// Revisa las ventas que todavía no llegaron a un estado final y actualiza su
+// estado real — sigue trackeando incluso después de "shipped" (a diferencia
+// de antes) para poder detectar cuando un courier nunca llega a confirmar
+// la entrega.
 async function reconciliar(supabase) {
   const { data: pendientes, error: selectError } = await supabase
     .from('ventas_mercadolibre')
-    .select('order_id, cuenta_ml, shipping_id')
-    .not('shipping_status', 'in', `(${ESTADOS_OCULTOS.join(',')})`)
+    .select('order_id, cuenta_ml, shipping_id, shipped_at')
+    .not('shipping_status', 'in', `(${ESTADOS_FINALES.join(',')})`)
     .not('shipping_id', 'is', null);
   if (selectError) {
     console.error('ML reconciliación: error leyendo pendientes:', selectError);
@@ -140,7 +144,9 @@ async function reconciliar(supabase) {
         shipping_substatus: shipment.substatus,
         tracking_number: shipment.tracking_number || null,
       };
-      if (ESTADOS_OCULTOS.includes(shipment.status)) {
+      // shipped_at marca cuándo entró al balde "enviada" — se setea una sola
+      // vez, la primera vez que se detecta (no en cada reconciliación).
+      if (!venta.shipped_at && ESTADOS_ENVIADOS.includes(shipment.status)) {
         update.shipped_at = new Date().toISOString();
       }
       const { error } = await supabase.from('ventas_mercadolibre').update(update).eq('order_id', venta.order_id);
@@ -208,4 +214,4 @@ function startMercadoLibrePoller(supabase) {
   console.log(`Poller de Mercado Libre activo (cada ${POLL_MS / 1000}s, reconciliación cada ${RECONCILE_MS / 1000}s, filtrando substatus=${SUBSTATUS_FILTER})`);
 }
 
-module.exports = { startMercadoLibrePoller };
+module.exports = { startMercadoLibrePoller, ESTADOS_ENVIADOS, ESTADOS_FINALES };

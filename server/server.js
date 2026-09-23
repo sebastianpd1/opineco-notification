@@ -5,8 +5,9 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
-const { startMercadoLibrePoller } = require('./mercadolibre');
+const { startMercadoLibrePoller, ESTADOS_ENVIADOS: ML_ESTADOS_ENVIADOS, ESTADOS_FINALES: ML_ESTADOS_FINALES } = require('./mercadolibre');
 const { enviarPush } = require('./push');
+const { clasificarEnvio } = require('./couriers');
 
 // Red de seguridad: un bug en cualquier integración (Discord, correo, etc.)
 // no debe tumbar el hub entero — acá también vive el dashboard y la API.
@@ -259,6 +260,9 @@ app.delete('/api/pedidos/retirar/:id', requireApiKey, async (req, res) => {
 });
 
 // ---------- Pedidos a despachar ----------
+// Una vez que el courier (Starken/Rappi/Blue Express) marca el envío como
+// "en tránsito", el pedido se muda al widget de Enviados (GET
+// /api/envios-en-transito) — acá solo quedan los que todavía no salieron.
 app.get('/api/pedidos/despachar', async (req, res) => {
   const { sucursal } = req.query;
   let query = supabase.from('pedidos_despachar').select('*').order('created_at', { ascending: true });
@@ -266,7 +270,8 @@ app.get('/api/pedidos/despachar', async (req, res) => {
 
   const { data, error } = await query;
   if (error) return handleSupabaseError(res, error);
-  res.json(data);
+  const pendientes = data.filter((p) => clasificarEnvio(p.transportista, p.estado_envio) === 'pendiente');
+  res.json(pendientes);
 });
 
 app.post('/api/pedidos/despachar', requireApiKey, async (req, res) => {
@@ -290,17 +295,58 @@ app.delete('/api/pedidos/despachar/:id', requireApiKey, async (req, res) => {
 });
 
 // ---------- Ventas Mercado Libre ----------
-// Se ocultan una vez despachadas/cerradas — ver investigacion-integraciones.md §1.1
-const ML_ESTADOS_OCULTOS = ['shipped', 'delivered', 'not_delivered', 'cancelled', 'closed', 'error', 'stale_shipped'];
+// Solo las pendientes (ver investigacion-integraciones.md §1.1) — las
+// "enviadas" viven en GET /api/envios-en-transito, las finales no se
+// muestran en ningún lado.
+const ML_NO_PENDIENTE = [...ML_ESTADOS_ENVIADOS, ...ML_ESTADOS_FINALES];
 
 app.get('/api/ventas-ml', async (req, res) => {
   const { data, error } = await supabase
     .from('ventas_mercadolibre')
     .select('*')
-    .not('shipping_status', 'in', `(${ML_ESTADOS_OCULTOS.join(',')})`)
+    .not('shipping_status', 'in', `(${ML_NO_PENDIENTE.join(',')})`)
     .order('created_at', { ascending: false });
   if (error) return handleSupabaseError(res, error);
   res.json(data);
+});
+
+// ---------- Envíos en tránsito (widget 3: ML + despachos de courier) ----------
+// Todo lo que ya salió de la sucursal pero todavía no tiene confirmación de
+// entrega — para pillar a tiempo los casos donde el courier nunca la
+// confirma, en vez de que la venta/pedido desaparezca sin más.
+app.get('/api/envios-en-transito', async (req, res) => {
+  const { sucursal } = req.query;
+  let despachoQuery = supabase.from('pedidos_despachar').select('*');
+  if (sucursal) despachoQuery = despachoQuery.eq('sucursal_id', sucursal);
+
+  const [despachoRes, ventasRes] = await Promise.all([
+    despachoQuery,
+    supabase.from('ventas_mercadolibre').select('*').in('shipping_status', ML_ESTADOS_ENVIADOS),
+  ]);
+  if (despachoRes.error) return handleSupabaseError(res, despachoRes.error);
+  if (ventasRes.error) return handleSupabaseError(res, ventasRes.error);
+
+  const despachosEnTransito = despachoRes.data
+    .filter((p) => clasificarEnvio(p.transportista, p.estado_envio) === 'en_transito')
+    .map((p) => ({
+      source: p.transportista || 'despacho',
+      id: p.id,
+      cliente: p.cliente,
+      detalle: p.destino || p.detalle || '',
+      estado_texto: p.estado_envio,
+    }));
+
+  const ventasEnTransito = ventasRes.data.map((v) => ({
+    source: 'ML',
+    id: v.order_id,
+    cliente: v.cliente,
+    detalle: (v.items && v.items[0]?.titulo) || v.cuenta_ml,
+    cuenta_ml: v.cuenta_ml,
+    estado_status: v.shipping_status,
+    estado_substatus: v.shipping_substatus,
+  }));
+
+  res.json([...despachosEnTransito, ...ventasEnTransito]);
 });
 
 // ---------- Push web (PWA) ----------

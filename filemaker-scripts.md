@@ -35,9 +35,11 @@ Insert From URL [
 
 Usa las variables que el script ya tiene seteadas (`$id` = `VENTAS::ID`, `$cliente` = `CLIENTES::Nombre`) — no hace falta declarar nada nuevo, solo agregar este bloque después de los `Set Field` de `DETALLEENVIOS` en cada rama.
 
-## 2. Delete de `pedidos_despachar` (cuando se emite la etiqueta)
+## 2. Al emitir la etiqueta: YA NO se borra, ahora se guarda el `transportista`
 
-**Secuencia confirmada:** venta → click en botón despacho (script de la sección 1, pasa a `DETALLEENVIOS`/tabla de espera) → más tarde, se emite la etiqueta por API → corre el script corto que ya sincroniza `DETALLEENVIOS` hacia la tabla `despachos` (métricas). Ese script corto es el punto de cierre real — se le agrega el `DELETE`:
+**Cambio importante respecto a lo que había antes:** hasta ahora este script borraba `pedidos_despachar` apenas se emitía la etiqueta — pero eso pasa ANTES de que el paquete siquiera salga de la sucursal, así que si el courier nunca lo entregaba, no había forma de darse cuenta (se perdía de la pantalla igual). Con el widget nuevo de "Enviados, esperando entrega" (§5 abajo) el pedido tiene que seguir vivo en Supabase hasta que el courier confirme la entrega. Este script pasa a hacer un `PATCH` (no `DELETE`) para guardar qué courier se usó:
+
+**Secuencia confirmada:** venta → click en botón despacho (script de la sección 1, pasa a `DETALLEENVIOS`/tabla de espera) → más tarde, se emite la etiqueta por API → corre el script corto que ya sincroniza `DETALLEENVIOS` hacia la tabla `despachos` (métricas). Ese es el punto donde se sabe qué courier se usó:
 
 ```
 Set Variable [ $venta_id ; Value: DETALLEENVIOS::VentasID ]
@@ -51,18 +53,49 @@ Insert from URL [ Select ; With dialog: Off ; $resultado ;
     "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/despachos" ;
     cURL options: "-X POST " & "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " & ... ]
 
-# --- NUEVO: sacarlo de la TV, ya se etiquetó/despachó ---
+# --- NUEVO: guardar qué courier se usó (reemplaza al DELETE que había acá) ---
 Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
     "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/pedidos_despachar?id=eq." & $venta_id ;
     cURL options:
-        "-X DELETE " &
+        "-X PATCH " &
         "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " &
         "--header \"Authorization: Bearer TU_SUPABASE_SECRET_KEY_ACA\" " &
+        "--header \"Content-Type: application/json\" " &
+        "--data " & Quote (
+            JSONSetElement ( "{}" ;
+                [ "transportista" ; "Starken" ; JSONString ]  // o "Rappi" / "BlueExpress", según corresponda a esta rama del script
+            )
+        ) & " " &
         "--max-time 10"
 ]
 ```
 
-(el bloque de arriba hasta el primer `Insert from URL` es el script existente, tal cual — solo se le agrega el último bloque nuevo al final)
+(el bloque de arriba hasta el primer `Insert from URL` es el script existente, tal cual — el bloque nuevo reemplaza al `DELETE` que estaba acá antes)
+
+## 5. Widget "Enviados, esperando entrega" — el `PATCH` que falta
+
+Esto va en el/los scripts que **ya existen** y consultan periódicamente Starken/Rappi/Blue Express (los que llenan `DETALLEENVIOS::StarkenEstado` y equivalentes) — se le agrega un `PATCH` más, justo después de guardar el estado localmente, usando el mismo `$venta_id`/`id` de siempre:
+
+```
+Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
+    "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/pedidos_despachar?id=eq." & $venta_id ;
+    cURL options:
+        "-X PATCH " &
+        "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " &
+        "--header \"Authorization: Bearer TU_SUPABASE_SECRET_KEY_ACA\" " &
+        "--header \"Content-Type: application/json\" " &
+        "--data " & Quote (
+            JSONSetElement ( "{}" ;
+                [ "estado_envio" ; $estado ; JSONString ]
+            )
+        ) & " " &
+        "--max-time 10"
+]
+```
+
+`$estado` es la misma variable que ya arma cada script (texto de Starken, `EstadoNombre` de Rappi, o `title` de Blue Express) — se manda tal cual, sin traducir nada; la traducción a "pendiente / en tránsito / entregado" la hace el hub (`server/couriers.js`).
+
+**Cuándo borrar de verdad:** cuando ese mismo script detecte que el estado es un final (`ENTREGADO` / `Entregado` / `DL`), agregar el mismo bloque `DELETE` que antes estaba en la sección 2 (mismo `id=eq.$venta_id`) — recién ahí el pedido sale de Supabase para siempre, consistente con el criterio "sin historial" de esta tabla.
 
 ---
 

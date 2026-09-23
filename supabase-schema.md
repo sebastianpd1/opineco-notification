@@ -46,10 +46,13 @@ Misma lógica que retirar (cola en vivo, sin historial), con destino y transport
 | `sucursal_id` | `text` FK → `sucursales.id` | sucursal de origen del despacho |
 | `destino` | `text` | ej. "Bolivia", "Valparaíso" |
 | `detalle` | `text` | |
-| `transportista` | `text` nullable | ej. "DHL", "Chilexpress", "Retiro interno" |
+| `transportista` | `text` nullable | `Starken` \| `Rappi` \| `BlueExpress` (debe matchear exacto — ver `server/couriers.js`) |
+| `estado_envio` | `text` nullable | estado crudo tal cual lo entrega la API del courier (ej. `EN TRANSITO`, `Retirado`, `LD`) — FileMaker ya lo consulta por su cuenta, acá solo se guarda |
 | `created_at` | `timestamptz` default `now()` | |
 
-Mismo patrón de insert/delete que `pedidos_retirar`.
+Insert igual que `pedidos_retirar`. El `delete` ya no pasa solo al emitir la etiqueta — ver nota abajo y `filemaker-scripts.md` §2.
+
+**Widget "Enviados, esperando entrega":** `server/couriers.js` traduce `estado_envio` a 3 baldes (pendiente / en_transito / entregado) por courier. Mientras está en `pendiente`, sale en el widget de despacho de siempre; en `en_transito` se muda al widget nuevo (`GET /api/envios-en-transito`); en `entregado` FileMaker borra la fila (mismo criterio "sin historial" de siempre). Sin `estado_envio` (o transportista no reconocido) se trata como pendiente — es el comportamiento de hoy, no rompe nada si todavía no se actualizó el script de FileMaker.
 
 ---
 

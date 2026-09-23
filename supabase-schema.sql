@@ -76,3 +76,8 @@ insert into sucursales (id, nombre) values
   ('lampa', 'Sucursal Lampa'),
   ('nunoa', 'Sucursal Ñuñoa')
 on conflict (id) do nothing;
+
+-- Widget "Enviados, esperando entrega" (Starken/Rappi/Blue Express) — ver
+-- filemaker-scripts.md §5 y server/couriers.js para el detalle. FileMaker ya
+-- consulta cada courier por su cuenta, acá solo se guarda el resultado.
+alter table pedidos_despachar add column if not exists estado_envio text;

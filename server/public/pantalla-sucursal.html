@@ -23,6 +23,9 @@
     --mail1: #7FC7FB;
     --mail2: #1E7FE0;
     --ml: #FFE600;
+    --starken: #6B8E23;
+    --rappi: #C2185B;
+    --bluex: #1565C0;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
@@ -307,6 +310,23 @@
   .order-card.ml-card .order-who,
   .order-card.ml-card .order-detail{color:#2D3277;}
 
+  /* Despachos con courier identificado — mismo criterio que ML: el color
+     de fondo dice quién es de un vistazo, sin tener que leer texto.
+     Se usan en todos los widgets donde puede aparecer una tarjeta de
+     despacho (Pedidos a Despachar y Enviados). */
+  .order-card.starken-card{background:var(--starken); border-color:var(--starken);}
+  .order-card.rappi-card{background:var(--rappi); border-color:var(--rappi);}
+  .order-card.blue-card{background:var(--bluex); border-color:var(--bluex);}
+  .order-card.starken-card .order-id,
+  .order-card.rappi-card .order-id,
+  .order-card.blue-card .order-id{color:#fff;}
+  .order-card.starken-card .order-who,
+  .order-card.rappi-card .order-who,
+  .order-card.blue-card .order-who,
+  .order-card.starken-card .order-detail,
+  .order-card.rappi-card .order-detail,
+  .order-card.blue-card .order-detail{color:rgba(255,255,255,0.88);}
+
   .notif-card{background:rgba(255,255,255,0.05); border-left:3px solid var(--pink); border-radius:8px; padding:10px 12px;}
   .notif-from{font-size:12px; font-weight:600; color:var(--pink);}
   .notif-text{font-size:13px; margin-top:3px; line-height:1.35;}
@@ -511,6 +531,17 @@
       </div>
     </div>
 
+    <div class="panel" id="enviadosPanel" style="grid-column:1 / -1; height:200px; display:none">
+      <div class="panel-head">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 16.5V6.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v10" stroke="#22C35E" stroke-width="1.4" stroke-linecap="round"/><path d="M14 10h3.3L20 13v3.5h-6V10Z" stroke="#22C35E" stroke-width="1.4" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="1.4" stroke="#22C35E" stroke-width="1.3"/><circle cx="16.5" cy="17.5" r="1.4" stroke="#22C35E" stroke-width="1.3"/></svg>
+        <div class="panel-title">Enviados — Esperando Entrega</div>
+        <div class="panel-count" id="enviadosCount">— en camino</div>
+      </div>
+      <div class="ticker-wrap">
+        <div class="ticker" id="enviadosTicker"></div>
+      </div>
+    </div>
+
   </div>
 
   <div class="toolbar">
@@ -708,11 +739,30 @@
     el.style.animationDuration = duracion + 's';
   }
 
+  // Un color de tarjeta por fuente — se usa en cualquier widget que mezcle
+  // despachos de distintos couriers/ML, para reconocer de un vistazo quién
+  // es sin leer texto. El orden también define cómo se agrupan al ordenar.
+  const FUENTE_ORDEN = ['Starken', 'Rappi', 'BlueExpress', 'ML'];
+  function claseFuente(source){
+    if(source === 'ML') return 'ml-card';
+    if(source === 'Starken') return 'starken-card';
+    if(source === 'Rappi') return 'rappi-card';
+    if(source === 'BlueExpress') return 'blue-card';
+    return '';
+  }
+  function ordenarPorFuente(items){
+    return [...items].sort((a, b) => {
+      const ia = FUENTE_ORDEN.indexOf(a.source), ib = FUENTE_ORDEN.indexOf(b.source);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }
+
   async function fetchPedidos(){
-    const [retirar, despachar, ventasMl] = await Promise.all([
+    const [retirar, despachar, ventasMl, enviados] = await Promise.all([
       fetch(`/api/pedidos/retirar?sucursal=${SUCURSAL}`).then(r => r.json()),
       fetch(`/api/pedidos/despachar?sucursal=${SUCURSAL}`).then(r => r.json()),
-      fetch('/api/ventas-ml').then(r => r.json())
+      fetch('/api/ventas-ml').then(r => r.json()),
+      fetch(`/api/envios-en-transito?sucursal=${SUCURSAL}`).then(r => r.json())
     ]);
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
@@ -724,10 +774,13 @@
     ajustarVelocidadMarquee(retirarTicker, 20, true);
 
     // FileMaker no tiene una señal de "ya se despachó" para esta tabla — el
-    // cierre es manual: tocar la tarjeta la saca de la lista.
-    const despacharHtml = despachar.map(p =>
-      `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div><div class="order-detail">${new Date(p.created_at).toLocaleDateString('es-CL')}</div></div>`
-    ).join('');
+    // cierre es manual: tocar la tarjeta la saca de la lista. Coloreadas por
+    // transportista cuando se conoce (ver couriers.js del lado del hub).
+    const despacharItems = despachar.map(p => ({
+      source: p.transportista || null,
+      id: p.id, cliente: p.cliente,
+      detalle: new Date(p.created_at).toLocaleDateString('es-CL'),
+    }));
 
     // Ventas de ML que ya cruzaron a un día distinto del de la compra y
     // siguen sin despacharse (atrasadas) — recién ahí bajan a este panel.
@@ -738,23 +791,48 @@
     const ventasAtrasadas = mlVisibleAca
       ? ventasMl.filter(v => v.fecha_compra && new Date(v.fecha_compra).toDateString() !== hoy)
       : [];
-    const ventasMlHtml = ventasAtrasadas.map(v => {
-      const item = (v.items && v.items[0]) || {};
-      return `<div class="order-card ml-card">
-        <div style="min-width:0;">
-          <div class="order-id">ML #${escapeHtml(v.order_id)} — ${escapeHtml(v.cuenta_ml)}</div>
-          <div class="order-who">${escapeHtml(item.titulo || 'Producto')}</div>
-          <div class="order-detail">${escapeHtml(v.cliente || '')}</div>
-        </div>
-        ${estadoBadgeHtml(v.shipping_status, v.shipping_substatus)}
-      </div>`;
+
+    const despacharOrdenado = ordenarPorFuente([...despacharItems, ...ventasAtrasadas.map(v => ({...v, source: 'ML'}))]);
+    const despacharHtmlAll = despacharOrdenado.map(item => {
+      if(item.source === 'ML'){
+        const it = (item.items && item.items[0]) || {};
+        return `<div class="order-card ml-card">
+          <div style="min-width:0;">
+            <div class="order-id">ML #${escapeHtml(item.order_id)} — ${escapeHtml(item.cuenta_ml)}</div>
+            <div class="order-who">${escapeHtml(it.titulo || 'Producto')}</div>
+            <div class="order-detail">${escapeHtml(item.cliente || '')}</div>
+          </div>
+          ${estadoBadgeHtml(item.shipping_status, item.shipping_substatus)}
+        </div>`;
+      }
+      return `<div class="order-card ${claseFuente(item.source)}" data-id="${escapeHtml(item.id)}"><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div><div class="order-detail">${item.detalle}</div></div>`;
     }).join('');
 
     document.getElementById('despacharCount').textContent = `${despachar.length + ventasAtrasadas.length} en ruta`;
-    const combinado = despacharHtml + ventasMlHtml;
     const despacharTicker = document.getElementById('despacharTicker');
-    despacharTicker.innerHTML = combinado + combinado;
+    despacharTicker.innerHTML = despacharHtmlAll + despacharHtmlAll;
     ajustarVelocidadMarquee(despacharTicker, 20, true);
+
+    // Widget 3: ya salieron pero el courier/ML todavía no confirma entrega.
+    const enviadosFiltrados = mlVisibleAca ? enviados : enviados.filter(e => e.source !== 'ML');
+    const enviadosOrdenados = ordenarPorFuente(enviadosFiltrados);
+    const enviadosPanel = document.getElementById('enviadosPanel');
+    enviadosPanel.style.display = enviadosOrdenados.length ? 'flex' : 'none';
+    document.getElementById('enviadosCount').textContent = `${enviadosOrdenados.length} en camino`;
+    const enviadosHtml = enviadosOrdenados.map(e => {
+      const estadoTexto = e.source === 'ML' ? estadoBadgeHtml(e.estado_status, e.estado_substatus) : `<span class="estado-badge" style="background:rgba(255,255,255,0.25)">${escapeHtml((e.estado_texto || '').replace(/_/g, ' '))}</span>`;
+      return `<div class="order-card ${claseFuente(e.source)}" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <div style="min-width:0;">
+          <div class="order-id">${escapeHtml(e.source)} #${escapeHtml(String(e.id))}</div>
+          <div class="order-who">${escapeHtml(e.cliente || '')}</div>
+          <div class="order-detail">${escapeHtml(e.detalle || '')}</div>
+        </div>
+        ${estadoTexto}
+      </div>`;
+    }).join('');
+    const enviadosTicker = document.getElementById('enviadosTicker');
+    enviadosTicker.innerHTML = enviadosHtml + enviadosHtml;
+    ajustarVelocidadMarquee(enviadosTicker, 20, true);
   }
 
   async function dismissDespacho(id){
