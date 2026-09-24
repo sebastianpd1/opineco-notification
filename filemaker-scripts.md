@@ -25,7 +25,7 @@ Insert From URL [
     "--data " & Quote (
         JSONSetElement ( "{}" ;
             [ "id" ; $id ; JSONString ] ;
-            [ "sucursal_id" ; VENTAS::SucursalID ; JSONString ] ;
+            [ "sucursal_id" ; Lower ( VENTAS::SucursalID ) ; JSONString ] ;
             [ "cliente" ; $cliente ; JSONString ]
         )
     ) & " " &
@@ -34,6 +34,8 @@ Insert From URL [
 ```
 
 Usa las variables que el script ya tiene seteadas (`$id` = `VENTAS::ID`, `$cliente` = `CLIENTES::Nombre`) — no hace falta declarar nada nuevo, solo agregar este bloque después de los `Set Field` de `DETALLEENVIOS` en cada rama.
+
+**Sobre mayúscula/minúscula:** confirmado que el campo de FileMaker admite `RENCA` o `renca` indistintamente, así que no hay que depender de que cada script lo escriba bien — la base de datos ahora normaliza sola cualquier `sucursal_id` a minúscula antes de guardar (trigger `normalizar_sucursal_id` en `supabase-schema.sql`). El `Lower()` de estos scripts queda como algo opcional/prolijo, no es la única red de seguridad.
 
 ## 2. Al emitir la etiqueta: YA NO se borra, ahora se guarda el `transportista`
 
@@ -116,7 +118,7 @@ Insert From URL [
     "--data " & Quote (
         JSONSetElement ( "{}" ;
             [ "id" ; $id ; JSONString ] ;
-            [ "sucursal_id" ; $sucursal ; JSONString ] ;
+            [ "sucursal_id" ; Lower ( $sucursal ) ; JSONString ] ;
             [ "cliente" ; $cliente ; JSONString ]
         )
     ) & " " &
@@ -124,7 +126,7 @@ Insert From URL [
 ]
 ```
 
-Usa las variables que el script de retiro ya tiene (`$id`, `$sucursal` = `VENTAS::SucursalID`, `$cliente`).
+Usa las variables que el script de retiro ya tiene (`$id`, `$sucursal` = `VENTAS::SucursalID`, `$cliente`) — mismo motivo del `Lower()` que en la sección 1 (la FK de `sucursal_id` exige minúscula).
 
 ## 4. Delete de `pedidos_retirar` (cuando el cliente lo retira)
 
@@ -163,6 +165,31 @@ El script de retiro local también dispara un mensaje de WhatsApp vía `api.call
 
 Si Supabase no responde, `Insert From URL` falla pero el registro en FileMaker ya quedó guardado — no bloquear al operario por esto. Revisar `$resultado` (trae el body de la respuesta o el error de cURL) y loguearlo si quieren poder reintentar después. Mismo patrón que ya usan con `--max-time 10`.
 
-## Sobre las notificaciones rojas (`notificaciones_sucursal`) y el resto de las integraciones
+## 6. Notificación manual (banner rojo) desde el "edit box" de FileMaker
 
-Esas sí van a seguir pasando por el hub Node (no directo a Supabase desde FileMaker), porque el hub necesita centralizar la lógica de a qué sucursal(es) llega cada una — se documenta aparte cuando lleguemos a esa parte del TO-DO.
+A diferencia de Discord/Tawk (que sí pasan por el hub Node porque necesitan verificar firma de webhook), las notificaciones manuales que un operario tipea a mano en FileMaker van **directo a Supabase**, mismo patrón que el resto de los scripts de esta guía:
+
+```
+Insert From URL [
+  Select target: <ninguno> ;
+  Target: $resultado ;
+  "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/notificaciones_sucursal" ;
+  cURL options:
+    "-X POST " &
+    "--header \"apikey: " & $$SUPABASE_KEY & "\" " &
+    "--header \"Authorization: Bearer " & $$SUPABASE_KEY & "\" " &
+    "--header \"Content-Type: application/json\" " &
+    "--data " & Quote (
+        JSONSetElement ( "{}" ;
+            [ "sucursal_id" ; Lower ( $sucursal ) ; JSONString ] ;
+            [ "source" ; "manual" ; JSONString ] ;
+            [ "text" ; $texto ; JSONString ]
+        )
+    ) & " " &
+    "--max-time 10"
+]
+```
+
+`$sucursal` = a qué sucursal va dirigida (con `Lower()`, mismo motivo que en las secciones 1 y 3 — la FK exige minúscula); si se deja `sucursal_id` vacío/null, la alerta es broadcast a todas las pantallas. `$texto` es el mensaje que escribe el operario. Esta alerta sale en el banner rojo grande, y hace sonar la campanita de la TV apenas llega.
+
+**Cierre:** esto no se borra desde FileMaker — se cierra desde la propia TV (tocando la alerta) o sola a las 24hs si nadie la toca (ver `server/server.js`, `limpiarAlertasVencidas`).

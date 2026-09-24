@@ -93,3 +93,33 @@ alter table pedidos_retirar alter column sucursal_id drop not null;
 -- se calcula solo en server/mercadolibre.js a partir de logistic_type y
 -- tracking_method del shipment, mismo criterio que ya tenían en FileMaker.
 alter table ventas_mercadolibre add column if not exists medio_envio text;
+
+-- sucursal_id siempre en minúscula, sin importar cómo lo mande quien
+-- escriba (confirmado: el campo de FileMaker admite mayúscula y minúscula
+-- indistintamente). Los IDs de `sucursales` son todos minúscula, así que
+-- sin esto un "RENCA" en vez de "renca" rompe la foreign key y el insert
+-- se pierde en silencio. Se normaliza acá, en la base, para no depender de
+-- que cada script de FileMaker lo escriba bien.
+create or replace function normalizar_sucursal_id() returns trigger as $$
+begin
+  if new.sucursal_id is not null then
+    new.sucursal_id := lower(new.sucursal_id);
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_normalizar_sucursal_pedidos_retirar on pedidos_retirar;
+create trigger trg_normalizar_sucursal_pedidos_retirar
+  before insert or update on pedidos_retirar
+  for each row execute function normalizar_sucursal_id();
+
+drop trigger if exists trg_normalizar_sucursal_pedidos_despachar on pedidos_despachar;
+create trigger trg_normalizar_sucursal_pedidos_despachar
+  before insert or update on pedidos_despachar
+  for each row execute function normalizar_sucursal_id();
+
+drop trigger if exists trg_normalizar_sucursal_notificaciones on notificaciones_sucursal;
+create trigger trg_normalizar_sucursal_notificaciones
+  before insert or update on notificaciones_sucursal
+  for each row execute function normalizar_sucursal_id();
