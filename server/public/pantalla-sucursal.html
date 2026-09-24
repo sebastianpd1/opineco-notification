@@ -604,13 +604,68 @@
     }
   }
 
+  // Campanitas al llegar algo nuevo (correo, alerta roja, Discord, venta ML,
+  // retiro) — sintetizadas con Web Audio, sin depender de un archivo de
+  // sonido externo. Los navegadores bloquean el audio hasta el primer
+  // click/touch de la persona, así que se crea/reactiva el AudioContext ahí
+  // también.
+  let audioCtx = null;
+  function tonoCampana(notas, duracion){
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ahora = audioCtx.currentTime;
+    notas.forEach(({freq, inicio, vol}) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t0 = ahora + inicio;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duracion);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + duracion + 0.05);
+    });
+  }
+  // Genérica: correo, alerta roja (Discord/Tawk/manual), retiro nuevo.
+  function sonarCampana(){
+    try {
+      tonoCampana([
+        { freq: 880, inicio: 0, vol: 0.35 },
+        { freq: 1320, inicio: 0, vol: 0.22 },
+        { freq: 1760, inicio: 0, vol: 0.12 },
+      ], 3);
+    } catch {}
+  }
+  // Distinta para venta nueva de ML — 3 notas ascendentes tipo caja
+  // registradora, para que no se confunda con la genérica de arriba.
+  function sonarCampanaVenta(){
+    try {
+      tonoCampana([
+        { freq: 660, inicio: 0, vol: 0.3 },
+        { freq: 880, inicio: 0.25, vol: 0.3 },
+        { freq: 1320, inicio: 0.5, vol: 0.3 },
+      ], 2.5);
+    } catch {}
+  }
+  document.addEventListener('click', () => {
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }, { once: true });
+
   let alerts = [];
+  let primerFetchAlerts = true;
 
   async function fetchAlerts(){
     const res = await fetch(`/api/alerts${qsSucursal()}`);
-    alerts = await res.json();
+    const nuevas = await res.json();
+    const idsAntes = new Set(alerts.map(a => a.id));
+    const hayAlertaNueva = !primerFetchAlerts && nuevas.some(a => !idsAntes.has(a.id));
+    primerFetchAlerts = false;
+    alerts = nuevas;
     render();
     actualizarBadgeApp();
+    if(hayAlertaNueva) sonarCampana();
   }
   function ackBody(){
     return {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({acknowledged_by: SUCURSAL})};
@@ -872,6 +927,10 @@
     });
   }
 
+  let primerFetchPedidos = true;
+  let idsRetirarAntes = new Set();
+  let idsVentasMlAntes = new Set();
+
   async function fetchPedidos(){
     const [retirar, despachar, ventasMl, enviados] = await Promise.all([
       fetch(`/api/pedidos/retirar${qsSucursal()}`).then(r => r.json()),
@@ -879,6 +938,16 @@
       fetch('/api/ventas-ml').then(r => r.json()),
       fetch(`/api/envios-en-transito${qsSucursal()}`).then(r => r.json())
     ]);
+
+    // Campanita de retiro nuevo y de venta ML nueva (esta última con sonido
+    // distinto) — comparando contra los ids vistos en el fetch anterior.
+    if(!primerFetchPedidos){
+      if(retirar.some(p => !idsRetirarAntes.has(p.id))) sonarCampana();
+      if(ventasMl.some(v => !idsVentasMlAntes.has(v.order_id))) sonarCampanaVenta();
+    }
+    primerFetchPedidos = false;
+    idsRetirarAntes = new Set(retirar.map(p => p.id));
+    idsVentasMlAntes = new Set(ventasMl.map(v => v.order_id));
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
     const retirarHtml = retirar.map(p =>
@@ -978,6 +1047,7 @@
     if(card && card.dataset.id) dismissRetiro(card.dataset.id);
   });
 
+  let primerFetchBadgeCounts = true;
   async function fetchBadgeCounts(){
     const counts = await fetch(`/api/alerts/counts${qsSucursal()}`).then(r => r.json());
     for (const [source, elId] of [['discord','badgeDiscord'], ['tawk','badgeTawk'], ['correo','badgeCorreo']]) {
@@ -986,6 +1056,10 @@
       el.textContent = n;
       el.style.display = n > 0 ? 'flex' : 'none';
     }
+    // El correo no pasa por el banner rojo (a propósito, ver server.js), así
+    // que su campanita se dispara acá, comparando contra el conteo anterior.
+    if(!primerFetchBadgeCounts && (counts.correo || 0) > (ultimosCounts.correo || 0)) sonarCampana();
+    primerFetchBadgeCounts = false;
     ultimosCounts = counts;
     actualizarBadgeApp();
   }
