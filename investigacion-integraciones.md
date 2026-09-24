@@ -140,6 +140,27 @@ Los access tokens de las 3 cuentas activas **no están en Supabase** — viven e
 
 ---
 
+## 1.2 Medio de envío (`logistic_type`) y la búsqueda fallida de la hora límite de despacho
+
+**`medio_envio`** (calculado en `server/mercadolibre.js`, función `medioEnvioMl`) se arma con `shipment.logistic_type` + `shipment.tracking_method`:
+
+- **`self_service`** → `FLEX`. El vendedor entrega directo (o coordina un repartidor propio/tercero) — no pasa por un Place ni por un HUB de ML.
+- **`xd_drop_off`** con `tracking_method = "MEL Distribution"` → `MERCADO LIBRE`. Ruta: Vendedor → **Place** (tienda con logo de ML/Pickit/HOP en la puerta) → Colecta → HUB de ML → Carrier → Comprador. El vendedor deja el paquete en un Place, no en un correo.
+- **`xd_drop_off`** con otro `tracking_method` → `BLUEXPRESS`.
+- **`drop_off`** (sin `xd_`) es distinto de `xd_drop_off`: acá el vendedor lleva el paquete directo a la oficina del correo/carrier asignado (sin pasar por Place ni HUB de ML). Ruta: Vendedor → Carrier → Comprador. Hoy no se usa `medio_envio` para diferenciarlo porque no lo vimos aparecer en los envíos reales de las 3 cuentas — si aparece, revisar `medioEnvioMl` para agregarlo.
+
+**Búsqueda fallida (2026-09-24) — hora límite para llevar el paquete al Place/correo:**
+
+Se probaron, contra envíos reales de las 3 cuentas, todos estos candidatos y ninguno sirvió:
+
+- `shipping_option.estimated_delivery_time.pay_before` — **confirmado en doc oficial de ML que es la fecha límite de PAGO** (métodos de pago diferido), no de despacho. Coincidencia inicial con "11:00" fue casualidad — con más muestras salieron horas sin sentido (04:00, 08:00).
+- `shipping_option.estimated_handling_limit` — es el nombre que documenta ML (incluso en la doc de Chile) como "la fecha límite de despacho", pero **nunca aparece** en la respuesta real de `/shipments/{id}` ni con el header `x-format-new: true` (que cambia `shipping_option` por `lead_time`, mismo problema). Ni siquiera sale como `null` — la clave no existe. Sospecha: doc desactualizada (el ejemplo que la documenta es de 2016) y el campo pudo haberse renombrado a `estimated_schedule_limit` (mismo lugar en la estructura, mismo formato `{date}`), pero en la práctica también viene siempre `null`.
+- `GET /users/{seller_id}/service/{service_type}/processing_time_tool` (header `X-Version: v3`) — el endpoint **existe** (responde `400 invalid service type` en vez de 404 para varios valores), pero no se encontró el `service_type` válido. Probado sin éxito: `self_service`, `xd_drop_off`, `drop_off`, `cross_docking`, `fulfillment`, `shipping`, `custom`, `not_specified`, `same_day`, `fbm`, `cross_docking_drop_off` (400 limpio = formato ok, valor no reconocido) y `me1`/`me2` (404 = ni siquiera llega a validar el service_type). Adivinar más valores al voleo hizo que ML devolviera `403 PolicyAgent UNAUTHORIZED` — probablemente rate-limit por las pruebas seguidas, así que hay que ir con cuidado si se retoma esto para no arriesgar el acceso real de las cuentas.
+
+**Pendiente:** preguntarle directo a soporte de Developers de Mercado Libre cuáles son los `service_type` válidos de `processing_time_tool`. Si se consigue, hay que integrarlo en `mercadolibre.js` y mostrar el dato en el widget "Pedidos a Despachar" (se sacó un intento anterior basado en `pay_before` por ser incorrecto — ver commit `c48c548`).
+
+---
+
 ## 2. Tawk.to
 
 ### Eventos de webhook disponibles (son solo 4, no más)
