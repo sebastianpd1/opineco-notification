@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Le dice a Chrome/WebView que esta página ya maneja sus propios colores
+     a propósito (fondo oscuro + tarjetas de colores saturados) — sin esto,
+     el "forzar modo oscuro" de algunos navegadores de TV reescribe texto
+     oscuro pensado para fondos claros (ej. tarjetas amarillas) a blanco,
+     pensando que ayuda a la lectura, y termina arruinando el diseño. -->
+<meta name="color-scheme" content="dark">
 <title>Centro de Alertas — Sucursal</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
@@ -10,6 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
+    color-scheme: dark;
     --deep:   #17134F;
     --purple: #7A22C9;
     --pink:   #F0299D;
