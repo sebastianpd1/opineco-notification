@@ -167,17 +167,15 @@ Si Supabase no responde, `Insert From URL` falla pero el registro en FileMaker y
 
 ## 6. Notificación manual (banner rojo) desde el "edit box" de FileMaker
 
-A diferencia de Discord/Tawk (que sí pasan por el hub Node porque necesitan verificar firma de webhook), las notificaciones manuales que un operario tipea a mano en FileMaker van **directo a Supabase**, mismo patrón que el resto de los scripts de esta guía:
+**Corrección importante (ya probado en producción y falló así):** esto **no va directo a Supabase** como el resto de los scripts de esta guía — tiene que pasar por el `POST /api/alerts` del hub Node, porque el push real (lo que hace saltar el ícono/notificación del sistema operativo, no solo el banner en la TV) solo lo dispara el hub. Un insert directo a Supabase deja la alerta visible en el banner rojo de la TV, pero **nunca manda push** a los celulares/computadoras suscritos.
 
 ```
 Insert From URL [
   Select target: <ninguno> ;
   Target: $resultado ;
-  "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/notificaciones_sucursal" ;
+  "https://opineco-notification-production.up.railway.app/api/alerts" ;
   cURL options:
     "-X POST " &
-    "--header \"apikey: " & $$SUPABASE_KEY & "\" " &
-    "--header \"Authorization: Bearer " & $$SUPABASE_KEY & "\" " &
     "--header \"Content-Type: application/json\" " &
     "--data " & Quote (
         JSONSetElement ( "{}" ;
@@ -190,6 +188,8 @@ Insert From URL [
 ]
 ```
 
-`$sucursal` = a qué sucursal va dirigida (con `Lower()`, mismo motivo que en las secciones 1 y 3 — la FK exige minúscula); si se deja `sucursal_id` vacío/null, la alerta es broadcast a todas las pantallas. `$texto` es el mensaje que escribe el operario. Esta alerta sale en el banner rojo grande, y hace sonar la campanita de la TV apenas llega.
+No lleva `apikey`/`Authorization` de Supabase — es un endpoint propio del hub, sin key hoy (si en algún momento se configura `HUB_API_KEY` en Railway, ahí sí habría que agregar el header `X-Hub-Key`).
+
+`$sucursal` = a qué sucursal va dirigida (con `Lower()` igual que antes, por las dudas — la base también normaliza sola); si se deja `sucursal_id` vacío/null, la alerta es broadcast a todas las pantallas. `$texto` es el mensaje que escribe el operario. Esta alerta sale en el banner rojo grande, hace sonar la campanita de la TV, y ahora sí manda push real.
 
 **Cierre:** esto no se borra desde FileMaker — se cierra desde la propia TV (tocando la alerta) o sola a las 24hs si nadie la toca (ver `server/server.js`, `limpiarAlertasVencidas`).

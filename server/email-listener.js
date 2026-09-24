@@ -23,6 +23,37 @@ function yaNotificado(uid) {
   return false;
 }
 
+// El evento 'flags' de abajo solo avisa de cambios que pasan MIENTRAS la
+// conexión IDLE está viva — si se cae y reconecta (pasa cada tanto), un
+// correo marcado \Seen durante esa ventana muerta queda sin cerrar para
+// siempre, y la burbujita de correo queda contando cosas que ya se leyeron.
+// Por eso, cada vez que se (re)conecta, se revisa el estado real de todos
+// los pendientes antes de volver a escuchar en vivo.
+async function reconciliarLeidos(supabase, client) {
+  const { data: pendientes, error } = await supabase
+    .from('notificaciones_sucursal')
+    .select('id, external_ref')
+    .eq('source', 'correo')
+    .is('acknowledged_at', null)
+    .not('external_ref', 'is', null);
+  if (error) return console.error('Error leyendo correos pendientes para reconciliar:', error);
+
+  for (const notif of pendientes) {
+    try {
+      const mensaje = await client.fetchOne(notif.external_ref, { flags: true }, { uid: true });
+      if (mensaje && mensaje.flags && mensaje.flags.has('\\Seen')) {
+        const { error: updateError } = await supabase
+          .from('notificaciones_sucursal')
+          .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: 'auto:correo_leido_reconciliado' })
+          .eq('id', notif.id);
+        if (updateError) console.error('Error reconciliando correo leído:', updateError);
+      }
+    } catch (err) {
+      // Uid ya no existe en el buzón (borrado/movido) — no es un error real.
+    }
+  }
+}
+
 async function connectAndWatch(supabase) {
   const client = new ImapFlow({
     host: process.env.EMAIL_HOST,
@@ -45,6 +76,8 @@ async function connectAndWatch(supabase) {
   try {
     const lock = await client.getMailboxLock('INBOX');
     try {
+      await reconciliarLeidos(supabase, client);
+
       client.on('exists', async () => {
         // Llegó correo nuevo — traer el más reciente sin marcarlo como leído.
         try {
