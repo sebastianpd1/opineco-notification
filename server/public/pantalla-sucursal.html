@@ -901,19 +901,6 @@
     return `<div class="order-date">Creado el ${texto}</div>`;
   }
 
-  // Hora límite de ML para llevar el paquete al punto de despacho — no
-  // siempre viene, así que si no hay dato no se muestra nada (no rompe el
-  // layout de la tarjeta). Si ya venció, se destaca en rojo.
-  function horaLimiteDespachoHtml(horaLimiteIso){
-    if(!horaLimiteIso) return '';
-    const limite = new Date(horaLimiteIso);
-    const vencido = limite.getTime() < Date.now();
-    const hora = limite.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-    const color = vencido ? '#991B1B' : '#B45309';
-    const texto = vencido ? `Venció el despacho (${hora})` : `Despachar antes de las ${hora}`;
-    return `<span class="estado-badge" style="background:${color}">${escapeHtml(texto)}</span>`;
-  }
-
   // Solo se muestra en la vista "todas" — si no, no hace falta aclarar de
   // qué sucursal es cada tarjeta porque ya se sabe por el contexto de la TV.
   function sucursalTagHtml(sucursalId){
@@ -1033,7 +1020,6 @@
           <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
             ${medioEnvioBadgeHtml(item.medio_envio)}
             ${estadoBadgeHtml(item.shipping_status, item.shipping_substatus)}
-            ${horaLimiteDespachoHtml(item.hora_limite_despacho)}
           </div>
         </div>`;
       }

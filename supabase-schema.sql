@@ -124,8 +124,11 @@ create trigger trg_normalizar_sucursal_notificaciones
   before insert or update on notificaciones_sucursal
   for each row execute function normalizar_sucursal_id();
 
--- Hora límite para llevar el paquete al punto de despacho (viene en
--- shipping_option.estimated_delivery_time.pay_before de la API de ML —
--- nombre heredado de una versión vieja de la API, no describe bien lo que
--- es). No siempre viene poblado. Ver server/mercadolibre.js.
-alter table ventas_mercadolibre add column if not exists hora_limite_despacho timestamptz;
+-- REVERTIDO: se había agregado hora_limite_despacho asumiendo que
+-- shipping_option.estimated_delivery_time.pay_before era la hora límite
+-- para llevar el paquete al punto de despacho. Confirmado en la doc
+-- oficial de ML que ese campo es la fecha límite de PAGO (para métodos de
+-- pago diferido), no tiene relación con el despacho. Se deja de escribir
+-- desde server/mercadolibre.js; se borra la columna para no dejar un
+-- nombre engañoso dando vueltas.
+alter table ventas_mercadolibre drop column if exists hora_limite_despacho;

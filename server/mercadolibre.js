@@ -138,11 +138,6 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
   // no hay dato real, esto queda null (no hay campo confiable alternativo).
   const fechaEnvioEstimada = shipment.shipping_option?.estimated_delivery_time?.date || null;
 
-  // Hora límite para llevar el paquete al punto de despacho — viene en
-  // `pay_before` (nombre heredado de una versión vieja de la API de ML, no
-  // describe bien lo que es). Tampoco siempre viene poblado.
-  const horaLimiteDespacho = shipment.shipping_option?.estimated_delivery_time?.pay_before || null;
-
   const { error } = await supabase.from('ventas_mercadolibre').upsert({
     order_id: String(order.id),
     cuenta_ml: cuentaNombre,
@@ -156,7 +151,6 @@ async function enriquecerYGuardar(supabase, event, token, cuentaNombre) {
     medio_envio: medioEnvioMl(shipment),
     fecha_compra: order.date_created || null,
     fecha_envio_estimada: fechaEnvioEstimada,
-    hora_limite_despacho: horaLimiteDespacho,
   });
   if (error) throw error;
 
@@ -198,7 +192,6 @@ async function reconciliar(supabase) {
         shipping_substatus: shipment.substatus,
         tracking_number: shipment.tracking_number || null,
         medio_envio: medioEnvioMl(shipment),
-        hora_limite_despacho: shipment.shipping_option?.estimated_delivery_time?.pay_before || null,
       };
       // shipped_at marca cuándo entró al balde "enviada" — se setea una sola
       // vez, la primera vez que se detecta (no en cada reconciliación).
