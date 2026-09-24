@@ -42,6 +42,7 @@
   .page{
     max-width:1560px;
     margin:0 auto;
+    transform-origin:top center;
     display:flex;
     flex-direction:column;
     gap:20px;
@@ -887,11 +888,19 @@
   // Velocidad constante (px/seg) sin importar cuánto contenido haya — antes
   // la duración era fija en CSS, así que con pocos ítems (mockup) se veía
   // bien pero con datos reales (muchas ventas/pedidos) quedaba rapidísimo.
+  // El de "ventas nuevas" (mlTrack) y el de Enviados arrancan con su panel
+  // en display:none y recién pasan a visible en el mismo tick en que se
+  // llama a esta función — en navegadores más lentos (TV Bro y similares),
+  // medir el ancho/alto en ese instante puede devolver 0 porque el layout
+  // todavía no se recalculó. requestAnimationFrame asegura que el navegador
+  // ya haya hecho ese cálculo antes de medir.
   function ajustarVelocidadMarquee(el, pxPorSeg, vertical){
-    const tamanoTotal = vertical ? el.scrollHeight : el.scrollWidth;
-    const distancia = tamanoTotal / 2; // el contenido está duplicado para el loop sin corte
-    const duracion = Math.max(distancia / pxPorSeg, 6);
-    el.style.animationDuration = duracion + 's';
+    requestAnimationFrame(() => {
+      const tamanoTotal = vertical ? el.scrollHeight : el.scrollWidth;
+      const distancia = tamanoTotal / 2; // el contenido está duplicado para el loop sin corte
+      const duracion = Math.max(distancia / pxPorSeg, 6);
+      el.style.animationDuration = duracion + 's';
+    });
   }
 
   // Un color de tarjeta por fuente — se usa en cualquier widget que mezcle
@@ -1177,6 +1186,24 @@
   setInterval(fetchBadgeCounts, 10000);
   setInterval(fetchPedidos, 8000);
   setInterval(fetchVentasML, 30000);
+
+  // Los navegadores de TV (kiosko, control remoto) normalmente no pueden
+  // hacer scroll — si el contenido termina siendo más alto que la pantalla
+  // real, se ve "cortado" abajo sin ninguna forma de verlo. Acá se achica
+  // toda la página en conjunto (nunca se agranda) para que siempre entre
+  // completa. En celular no se toca nada, ahí sí se puede scrollear normal.
+  function ajustarEscalaPantalla(){
+    const pagina = document.querySelector('.page');
+    if(window.innerWidth <= 720){ pagina.style.transform = 'none'; return; }
+    pagina.style.transform = 'none';
+    const alturaDisponible = window.innerHeight - 24;
+    const alturaContenido = pagina.scrollHeight;
+    const escala = Math.min(1, alturaDisponible / alturaContenido);
+    pagina.style.transform = escala < 1 ? `scale(${escala})` : 'none';
+  }
+  window.addEventListener('resize', ajustarEscalaPantalla);
+  setInterval(ajustarEscalaPantalla, 5000);
+  setTimeout(ajustarEscalaPantalla, 1500);
 </script>
 
 <script>
