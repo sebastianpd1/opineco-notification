@@ -150,24 +150,21 @@ function handleSupabaseError(res, error) {
 // El calendario real vive en opineco.cl (FileMaker lo publica ahí), pero su
 // API solo permite pedidos con Origin www.opineco.cl (CORS) — la pantalla no
 // le puede pegar directo, así que el hub hace de intermediario server-to-
-// server (sin restricción de CORS) y le pasa a la pantalla solo lo que
-// necesita: los eventos "general" (feriados/avisos de empresa), no los
-// "personal" de cada empleado.
+// server (sin restricción de CORS). Se muestran todos los eventos (general
+// y personal), no solo los de empresa.
 app.get('/api/calendario', async (req, res) => {
   try {
     const apiRes = await fetch('https://www.opineco.cl/api.php');
     if (!apiRes.ok) throw new Error(`opineco.cl/api.php respondió ${apiRes.status}`);
     const eventos = await apiRes.json();
-    const generales = eventos
-      .filter((e) => e.tipo === 'general')
-      .map((e) => ({
-        titulo: e.titulo,
-        fecha_inicio: e.fecha_inicio,
-        fecha_fin: e.fecha_fin,
-        color: e.color,
-        prioridad: e.prioridad,
-      }));
-    res.json(generales);
+    const salida = eventos.map((e) => ({
+      titulo: e.titulo,
+      fecha_inicio: e.fecha_inicio,
+      fecha_fin: e.fecha_fin,
+      color: e.color,
+      prioridad: e.prioridad,
+    }));
+    res.json(salida);
   } catch (err) {
     console.error('Error trayendo calendario de opineco.cl:', err.message);
     res.json([]);
