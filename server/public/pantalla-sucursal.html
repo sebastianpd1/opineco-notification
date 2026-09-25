@@ -472,45 +472,14 @@
     </div>
 
     <div class="cal-block">
-      <div class="date-day">Miércoles</div>
-      <div class="date-full">10 de Septiembre, 2026</div>
+      <div class="date-day" id="fechaDia">—</div>
+      <div class="date-full" id="fechaCompleta">—</div>
 
       <div class="cal-native">
         <div class="cal-native-title">Próximos 7 días</div>
         <div class="cal-scroll">
         <table class="seven-days">
-          <tr>
-            <td class="day-box today">
-              <div class="day-name">Jue</div>
-              <div class="day-num">10</div>
-              <div class="ev-block">Reunión sucursal</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Vie</div>
-              <div class="day-num">11</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Sáb</div>
-              <div class="day-num">12</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Dom</div>
-              <div class="day-num">13</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Lun</div>
-              <div class="day-num">14</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Mar</div>
-              <div class="day-num">15</div>
-            </td>
-            <td class="day-box">
-              <div class="day-name">Mié</div>
-              <div class="day-num">16</div>
-              <div class="ev-block">Despacho Bolivia</div>
-            </td>
-          </tr>
+          <tr id="sieteDiasRow"></tr>
         </table>
         </div>
       </div>
@@ -1205,6 +1174,63 @@
   }
   actualizarReloj();
   setInterval(actualizarReloj, 1000);
+
+  // Mismos colores que usa el calendario real en opineco.cl, para que la
+  // franja de eventos se vea igual acá que ahí.
+  const CAL_COLORES = {
+    green: '#4ade80', blue: '#60a5fa', amber: '#fbbf24', red: '#f87171',
+    purple: '#c084fc', pink: '#f472b6', teal: '#34d399', orange: '#fb923c',
+  };
+  const CAL_TEXTOS = {
+    green: '#14532d', blue: '#1e3a5f', amber: '#78350f', red: '#7f1d1d',
+    purple: '#3b0764', pink: '#831843', teal: '#064e3b', orange: '#7c2d12',
+  };
+
+  function diaSinHora(d){ const c = new Date(d); c.setHours(0,0,0,0); return c; }
+
+  async function actualizarCalendario(){
+    const hoy = new Date();
+    const diaTexto = hoy.toLocaleDateString('es-CL', { weekday: 'long' });
+    document.getElementById('fechaDia').textContent = diaTexto.charAt(0).toUpperCase() + diaTexto.slice(1);
+    document.getElementById('fechaCompleta').textContent =
+      hoy.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    let eventos = [];
+    try {
+      eventos = await fetch('/api/calendario').then(r => r.json());
+    } catch { /* sin conexión momentánea — se muestran los 7 días igual, sin eventos */ }
+
+    const dias = [];
+    for(let i = 0; i < 7; i++){
+      const d = new Date(hoy);
+      d.setDate(hoy.getDate() + i);
+      dias.push(d);
+    }
+
+    const filaHtml = dias.map((d, i) => {
+      const nombre = d.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
+      const nombreCap = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+      const dSinHora = diaSinHora(d);
+      const eventosDelDia = eventos.filter(e => {
+        const inicio = diaSinHora(e.fecha_inicio + 'T00:00:00');
+        const fin = diaSinHora(e.fecha_fin + 'T00:00:00');
+        return dSinHora >= inicio && dSinHora <= fin;
+      });
+      const eventosHtml = eventosDelDia.map(e => {
+        const bg = CAL_COLORES[e.color] || CAL_COLORES.blue;
+        const texto = CAL_TEXTOS[e.color] || CAL_TEXTOS.blue;
+        return `<div class="ev-block" style="background:${bg}; color:${texto};">${escapeHtml(e.titulo)}</div>`;
+      }).join('');
+      return `<td class="day-box ${i === 0 ? 'today' : ''}">
+        <div class="day-name">${nombreCap}</div>
+        <div class="day-num">${d.getDate()}</div>
+        ${eventosHtml}
+      </td>`;
+    }).join('');
+    document.getElementById('sieteDiasRow').innerHTML = filaHtml;
+  }
+  actualizarCalendario();
+  setInterval(actualizarCalendario, 5 * 60 * 1000);
 
   fetchSucursal().then(fetchLeidas);
   fetchAlerts();
