@@ -185,17 +185,17 @@ app.get('/api/sucursales/:id', async (req, res) => {
 
 // ---------- Alertas (tabla notificaciones_sucursal) ----------
 // sucursal_id null = broadcast a todas las pantallas.
-// El correo queda afuera de este banner a propósito: es de alto volumen y
-// poco accionable para la sucursal, así que solo suma en el ícono con
-// burbuja del header (GET /api/alerts/counts) — el banner rojo es para
-// Discord/Tawk/manual, cosas puntuales que sí ameritan una alerta grande.
+// El banner rojo es solo para las notificaciones manuales (las que se
+// mandan a propósito desde FileMaker) — Discord, Tawk y correo son de
+// alto volumen y no ameritan una alerta grande en pantalla; esas suman
+// solo en sus íconos con burbuja del header (GET /api/alerts/counts).
 app.get('/api/alerts', async (req, res) => {
   const { sucursal } = req.query;
   let query = supabase
     .from('notificaciones_sucursal')
     .select('*')
     .is('acknowledged_at', null)
-    .neq('source', 'correo')
+    .eq('source', 'manual')
     .order('created_at', { ascending: true });
   if (sucursal) query = query.or(`sucursal_id.eq.${sucursal},sucursal_id.is.null`);
 
