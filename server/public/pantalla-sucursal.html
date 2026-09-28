@@ -343,9 +343,9 @@
      de fondo dice quién es de un vistazo, sin tener que leer texto.
      Se usan en todos los widgets donde puede aparecer una tarjeta de
      despacho (Pedidos a Despachar y Enviados). */
-  .order-card.starken-card{background:#166534; border-color:#166534;}
-  .order-card.rappi-card{background:#C2185B; border-color:#C2185B;}
-  .order-card.blue-card{background:#14213D; border-color:#14213D;}
+  .order-card.starken-card{background:#166534; border-color:#166534; cursor:default;}
+  .order-card.rappi-card{background:#C2185B; border-color:#C2185B; cursor:default;}
+  .order-card.blue-card{background:#14213D; border-color:#14213D; cursor:default;}
   .order-card.starken-card .order-id,
   .order-card.rappi-card .order-id,
   .order-card.blue-card .order-id{color:#fff;}
@@ -992,7 +992,13 @@
           </div>
         </div>`;
       }
-      return `<div class="order-card ${claseFuente(item.source)}" data-id="${escapeHtml(item.id)}"><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div>${sucursalTagHtml(item.sucursal_id)}${fechaCreacionHtml(item.created_at)}</div>`;
+      // Solo se puede tocar para cerrar cuando NO hay courier reconocido —
+      // los que sí tienen (Starken/Rappi/Blue) se cierran solos cuando
+      // FileMaker manda el estado final. Si se pudiera tocar igual, alguien
+      // la termina borrando antes de que llegue a "Enviados" (pasó de
+      // verdad con un despacho de Blue Express).
+      const idAttr = item.source ? '' : ` data-id="${escapeHtml(item.id)}"`;
+      return `<div class="order-card ${claseFuente(item.source)}"${idAttr}><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div>${sucursalTagHtml(item.sucursal_id)}${fechaCreacionHtml(item.created_at)}</div>`;
     }).join('');
 
     document.getElementById('despacharCount').textContent = `${despachar.length + ventasPendientesDespacho.length} nuevos`;
