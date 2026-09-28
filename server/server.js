@@ -265,7 +265,7 @@ app.get('/api/alerts/counts', async (req, res) => {
 app.get('/api/alerts/leidas', async (req, res) => {
   const { sucursal } = req.query;
   if (!sucursal) return res.json([]);
-  const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('notificaciones_sucursal')
     .select('id, acknowledged_at')
