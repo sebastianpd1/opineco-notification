@@ -1020,7 +1020,7 @@
   async function fetchVentasML(){
     const icono = document.getElementById('mlIcon');
     if(!mlVisibleAca){ icono.style.display = 'none'; return; }
-    icono.style.display = 'flex';
+    icono.style.display = 'block';
     const ventas = await fetch('/api/ventas-ml').then(r => r.json());
     const badge = document.getElementById('badgeMl');
     badge.textContent = ventas.length;
