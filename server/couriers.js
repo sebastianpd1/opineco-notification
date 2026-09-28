@@ -18,7 +18,9 @@ const COURIER_ESTADOS = {
     entregado: ['Entregado'],
   },
   BLUE: {
-    en_transito: ['ASO', 'PUH', 'IC', 'DA', 'LD'],
+    // PUO = "recepcionado en agencia" (admitido en punto Blue Express) — ya
+    // salió de la sucursal, así que cuenta como en tránsito, no pendiente.
+    en_transito: ['PUO', 'ASO', 'PUH', 'IC', 'DA', 'LD'],
     entregado: ['DL'],
   },
 };
