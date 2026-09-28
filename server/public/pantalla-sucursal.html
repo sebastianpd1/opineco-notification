@@ -127,33 +127,6 @@
     color:var(--tawk); white-space:nowrap;
   }
 
-  .ml-header-wide{
-    margin-top:18px;
-    width:100%;
-    background:var(--panel);
-    border:1px solid var(--panel-line);
-    border-radius:14px;
-    padding:12px 16px;
-    display:flex;
-    align-items:center;
-    gap:16px;
-    backdrop-filter:blur(6px);
-  }
-  .ml-header-wide .app-icon{flex-shrink:0;}
-  .ml-header-title{
-    font-family:'Sora',sans-serif; font-weight:600; font-size:13px;
-    flex-shrink:0; padding-right:16px; border-right:1px solid var(--panel-line);
-    line-height:1.3;
-  }
-  .ml-header-title b{display:block; color:#FFE600; font-size:14px;}
-  .ml-header-track-wrap{flex:1; min-width:0; overflow:hidden;}
-  .ml-header-track{
-    display:inline-flex; gap:36px; white-space:nowrap;
-    animation:mlScroll 20s linear infinite;
-    font-size:13px;
-  }
-  .ml-header-track b{color:#FFE600;}
-
   .cal-block{
     display:flex; flex-direction:column; align-items:flex-end; text-align:right;
     margin-left:auto;
@@ -284,7 +257,7 @@
     border:1px solid var(--panel-line);
     border-radius:16px;
     padding:18px 20px;
-    height:340px;
+    height:400px;
     min-width:0;
     display:flex;
     flex-direction:column;
@@ -364,32 +337,6 @@
   .notif-text{font-size:13px; margin-top:3px; line-height:1.35;}
   .notif-time{font-size:10px; color:var(--dim); margin-top:4px;}
 
-  /* ---------- MERCADOLIBRE: ancho completo, abajo ---------- */
-  .ml-wide{
-    background:var(--panel);
-    border:1px solid var(--panel-line);
-    border-radius:16px;
-    padding:16px 24px;
-    display:flex;
-    align-items:center;
-    gap:20px;
-    backdrop-filter:blur(6px);
-    height:88px;
-  }
-  .ml-wide .app-icon{flex-shrink:0;}
-  .ml-wide-title{
-    font-family:'Sora',sans-serif; font-weight:600; font-size:14px;
-    flex-shrink:0; padding-right:20px; border-right:1px solid var(--panel-line);
-  }
-  .ml-track-wrap{flex:1; overflow:hidden;}
-  .ml-track{
-    display:inline-flex; gap:48px; white-space:nowrap;
-    animation:mlScroll 22s linear infinite;
-  }
-  .ml-item{font-size:14px; color:var(--white);}
-  .ml-item b{color:#FFE600;}
-  @keyframes mlScroll{0%{transform:translateX(0);} 100%{transform:translateX(-50%);}}
-
   /* ---------- demo controls ---------- */
   .toolbar{
     display:flex; align-items:center; gap:10px;
@@ -411,8 +358,6 @@
     .mini-cal{width:100%;}
     .main{grid-template-columns:1fr;}
     .panel{height:260px;}
-    .ml-header-wide{flex-wrap:wrap;}
-    .ml-header-title{border-right:none; padding-right:0;}
     .toolbar{flex-wrap:wrap;}
   }
 </style>
@@ -461,6 +406,14 @@
           <span class="label">Correo</span>
         </div>
 
+        <div class="app-icon" id="mlIcon" style="display:none">
+          <div class="tile" style="background:#FFE600">
+            <svg viewBox="0 0 24 24"><path fill="#2D3277" d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 2.3 5.9 3.4-5.9 3.4-5.9-3.4L12 5.3Zm-7 5.1 6 3.5v6.8l-6-3.4v-6.9Zm8 10.3v-6.8l6-3.5v6.9l-6 3.4Z"/></svg>
+          </div>
+          <div class="badge-count" id="badgeMl" style="display:none">0</div>
+          <span class="label">MercadoLibre</span>
+        </div>
+
         <div class="acuse-widget" id="acuseWidget" style="display:none">
           <div class="acuse-check">
             <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#0B3D1F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -482,31 +435,6 @@
           <tr id="sieteDiasRow"></tr>
         </table>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MERCADOLIBRE: fila propia, ancho completo (antes estaba metido en la
-       columna izquierda del header, compartiendo ancho con el calendario,
-       por eso nunca llegaba a la esquina derecha de la pantalla). -->
-  <div class="ml-header-wide" id="mlWidget" style="display:none">
-    <div class="app-icon">
-      <div class="tile" style="background:#FFE600">
-        <svg viewBox="0 0 24 24"><path fill="#2D3277" d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 2.3 5.9 3.4-5.9 3.4-5.9-3.4L12 5.3Zm-7 5.1 6 3.5v6.8l-6-3.4v-6.9Zm8 10.3v-6.8l6-3.5v6.9l-6 3.4Z"/></svg>
-      </div>
-      <div class="badge-count" id="mlBadge">0</div>
-    </div>
-    <div class="ml-header-title">MercadoLibre<br><b id="mlTitle">0 ventas nuevas</b></div>
-    <div class="ml-header-track-wrap">
-      <div class="ml-header-track" id="mlTrack">
-        <span>Venta — <b>Toner HP 05A ×3</b> — $42.900</span>
-        <span>Venta — <b>Cartucho Canon 047</b> — $18.500</span>
-        <span>Venta — <b>Toner Brother TN-660</b> — $21.900</span>
-        <span>Venta — <b>Repuesto fusor Samsung</b> — $35.000</span>
-        <span>Venta — <b>Toner HP 05A ×3</b> — $42.900</span>
-        <span>Venta — <b>Cartucho Canon 047</b> — $18.500</span>
-        <span>Venta — <b>Toner Brother TN-660</b> — $21.900</span>
-        <span>Venta — <b>Repuesto fusor Samsung</b> — $35.000</span>
       </div>
     </div>
   </div>
@@ -880,9 +808,9 @@
   // Velocidad constante (px/seg) sin importar cuánto contenido haya — antes
   // la duración era fija en CSS, así que con pocos ítems (mockup) se veía
   // bien pero con datos reales (muchas ventas/pedidos) quedaba rapidísimo.
-  // El de "ventas nuevas" (mlTrack) y el de Enviados arrancan con su panel
-  // en display:none y recién pasan a visible en el mismo tick en que se
-  // llama a esta función — en navegadores más lentos (TV Bro y similares),
+  // El widget de Enviados arranca con su panel en display:none y recién
+  // pasa a visible en el mismo tick en que se llama a esta función — en
+  // navegadores más lentos (TV Bro y similares),
   // medir el ancho/alto en ese instante puede devolver 0 porque el layout
   // todavía no se recalculó. requestAnimationFrame asegura que el navegador
   // ya haya hecho ese cálculo antes de medir.
@@ -1085,25 +1013,18 @@
     else navigator.clearAppBadge().catch(() => {});
   }
 
+  // Antes esto armaba el banner horizontal de "ventas nuevas" — se sacó
+  // porque es redundante: las ventas de ML ya entran solas al widget de
+  // Pedidos a Despachar apenas están listas. Ahora solo prende el ícono
+  // con burbuja, mismo criterio que Discord/Tawk/Correo.
   async function fetchVentasML(){
-    const widget = document.getElementById('mlWidget');
-    if(!mlVisibleAca){ widget.style.display = 'none'; return; }
+    const icono = document.getElementById('mlIcon');
+    if(!mlVisibleAca){ icono.style.display = 'none'; return; }
+    icono.style.display = 'flex';
     const ventas = await fetch('/api/ventas-ml').then(r => r.json());
-    if(ventas.length === 0){ widget.style.display = 'none'; return; }
-    widget.style.display = 'flex';
-    document.getElementById('mlBadge').textContent = ventas.length;
-    document.getElementById('mlTitle').textContent = `${ventas.length} venta${ventas.length === 1 ? '' : 's'} nueva${ventas.length === 1 ? '' : 's'}`;
-
-    // Agrupadas por cuenta — se ordenan así antes de armar el ticker.
-    const ordenadas = [...ventas].sort((a, b) => (a.cuenta_ml || '').localeCompare(b.cuenta_ml || ''));
-    const items = ordenadas.map(v => {
-      const item = (v.items && v.items[0]) || {};
-      const monto = v.monto_total ? `$${Number(v.monto_total).toLocaleString('es-CL')}` : '';
-      return `<span>[${escapeHtml(v.cuenta_ml || '—')}] Venta — <b>${escapeHtml(item.titulo || 'Producto')}</b> — ${monto}</span>`;
-    }).join('');
-    const mlTrack = document.getElementById('mlTrack');
-    mlTrack.innerHTML = items + items;
-    ajustarVelocidadMarquee(mlTrack, 40, false);
+    const badge = document.getElementById('badgeMl');
+    badge.textContent = ventas.length;
+    badge.style.display = ventas.length > 0 ? 'flex' : 'none';
   }
 
   // ---- Push web (PWA) — para celulares sin TV cerca ----
