@@ -39,7 +39,15 @@ Usa las variables que el script ya tiene seteadas (`$id` = `VENTAS::ID`, `$clien
 
 ## 2. Al emitir la etiqueta: YA NO se borra, ahora se guarda el `transportista`
 
-**Cambio importante respecto a lo que había antes:** hasta ahora este script borraba `pedidos_despachar` apenas se emitía la etiqueta — pero eso pasa ANTES de que el paquete siquiera salga de la sucursal, así que si el courier nunca lo entregaba, no había forma de darse cuenta (se perdía de la pantalla igual). Con el widget nuevo de "Enviados, esperando entrega" (§5 abajo) el pedido tiene que seguir vivo en Supabase hasta que el courier confirme la entrega. Este script pasa a hacer un `PATCH` (no `DELETE`) para guardar qué courier se usó:
+**Cambio importante respecto a lo que había antes:** hasta ahora este script borraba `pedidos_despachar` apenas se emitía la etiqueta — pero eso pasa ANTES de que el paquete siquiera salga de la sucursal, así que si el courier nunca lo entregaba, no había forma de darse cuenta (se perdía de la pantalla igual). Con el widget nuevo de "Enviados, esperando entrega" el pedido tiene que seguir vivo en Supabase hasta que el courier confirme la entrega. Este script pasa a hacer un `PATCH` (no `DELETE`) para guardar qué courier se usó y su tracking:
+
+**Importante — de acá en más, FileMaker ya no tiene que consultar el estado del courier.** Eso lo hace directo el hub (`server/despachos-poller.js`), pegándole él mismo a las APIs de Starken/Rappi/Blue Express cada 10 minutos, igual que ya hace con Mercado Libre. Lo único que FileMaker tiene que mandar es esto: `transportista` + `tracking_number`, una sola vez, al emitir la etiqueta. El valor de `tracking_number` es distinto según el courier — es el identificador que cada API pide para consultar:
+
+| Courier | Qué va en `tracking_number` |
+|---|---|
+| `STARKEN` | el `orden_flete` (el "of" de la URL de tracking) |
+| `RAPPI` | el `IdPedido` (el número del pedido — **no** el `TrackingEncriptado`) |
+| `BLUE` | el código de bulto ("os") de la etiqueta — **no** el `transactionId` alfanumérico |
 
 **Secuencia confirmada:** venta → click en botón despacho (script de la sección 1, pasa a `DETALLEENVIOS`/tabla de espera) → más tarde, se emite la etiqueta por API → corre el script corto que ya sincroniza `DETALLEENVIOS` hacia la tabla `despachos` (métricas). Ese es el punto donde se sabe qué courier se usó:
 
@@ -75,30 +83,11 @@ Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
 
 (el bloque de arriba hasta el primer `Insert from URL` es el script existente, tal cual — el bloque nuevo reemplaza al `DELETE` que estaba acá antes)
 
-## 5. Widget "Enviados, esperando entrega" — el `PATCH` que falta
+## 5. Widget "Enviados, esperando entrega" — esto ya NO es de FileMaker
 
-Esto va en el/los scripts que **ya existen** y consultan periódicamente Starken/Rappi/Blue Express (los que llenan `DETALLEENVIOS::StarkenEstado` y equivalentes) — se le agrega un `PATCH` más, justo después de guardar el estado localmente, usando el mismo `$venta_id`/`id` de siempre:
+El hub (`server/despachos-poller.js`) consulta directo las APIs de Starken/Rappi/Blue Express cada 10 minutos, usando el `tracking_number` que FileMaker mandó en la sección 2, y actualiza `estado_envio` solo. Si algún día FileMaker deja de mandar `tracking_number` para algún despacho, ese despacho simplemente no se va a actualizar (se queda pegado en pendiente) — no rompe nada más.
 
-```
-Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
-    "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/pedidos_despachar?id=eq." & $venta_id ;
-    cURL options:
-        "-X PATCH " &
-        "--header \"apikey: " & $$SUPABASE_KEY & "\" " &
-        "--header \"Authorization: Bearer " & $$SUPABASE_KEY & "\" " &
-        "--header \"Content-Type: application/json\" " &
-        "--data " & Quote (
-            JSONSetElement ( "{}" ;
-                [ "estado_envio" ; $estado ; JSONString ]
-            )
-        ) & " " &
-        "--max-time 10"
-]
-```
-
-`$estado` es la misma variable que ya arma cada script (texto de Starken, `EstadoNombre` de Rappi, o `title` de Blue Express) — se manda tal cual, sin traducir nada; la traducción a "pendiente / en tránsito / entregado" la hace el hub (`server/couriers.js`).
-
-**El `DELETE` final ya NO va en FileMaker:** el hub corre un job cada 10 minutos que revisa `pedidos_despachar`, detecta solo qué filas llegaron a un estado final (`ENTREGADO` / `Entregado` / `DL`) y las borra — FileMaker no necesita agregar ninguna lógica de borrado, solo mandar el `PATCH` de arriba cada vez que consulta el estado.
+**El `DELETE` final tampoco va en FileMaker:** el hub corre otro job, cada 10 minutos, que revisa `pedidos_despachar`, detecta solo qué filas llegaron a un estado final (`ENTREGADO` / `Entregado` / `DL`) y las borra. FileMaker no tiene que hacer nada de esto — solo el `PATCH` único de la sección 2.
 
 ---
 

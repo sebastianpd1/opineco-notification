@@ -6,6 +6,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
 const { startMercadoLibrePoller, clasificarVenta } = require('./mercadolibre');
+const { startDespachosPoller } = require('./despachos-poller');
 const { enviarPush } = require('./push');
 const { clasificarEnvio } = require('./couriers');
 
@@ -22,6 +23,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SEC
 startDiscordBot(supabase);
 startEmailListener(supabase);
 startMercadoLibrePoller(supabase);
+startDespachosPoller(supabase);
 
 // Red de seguridad universal: cualquier alerta sin acuse de recibo que ya
 // tenga más de 24hs se cierra sola — no importa la fuente ni si la señal
