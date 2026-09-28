@@ -132,3 +132,8 @@ create trigger trg_normalizar_sucursal_notificaciones
 -- desde server/mercadolibre.js; se borra la columna para no dejar un
 -- nombre engañoso dando vueltas.
 alter table ventas_mercadolibre drop column if exists hora_limite_despacho;
+
+-- Número de seguimiento del courier (Starken/Rappi/Blue) — FileMaker lo
+-- manda junto con transportista al emitir la etiqueta, para poder
+-- mostrarlo en la tarjeta de "Enviados" igual que ya se hace con ML.
+alter table pedidos_despachar add column if not exists tracking_number text;

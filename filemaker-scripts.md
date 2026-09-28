@@ -55,17 +55,18 @@ Insert from URL [ Select ; With dialog: Off ; $resultado ;
     "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/despachos" ;
     cURL options: "-X POST " & "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " & ... ]
 
-# --- NUEVO: guardar qué courier se usó (reemplaza al DELETE que había acá) ---
+# --- NUEVO: guardar qué courier se usó + tracking (reemplaza al DELETE que había acá) ---
 Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
     "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/pedidos_despachar?id=eq." & $venta_id ;
     cURL options:
         "-X PATCH " &
-        "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " &
-        "--header \"Authorization: Bearer TU_SUPABASE_SECRET_KEY_ACA\" " &
+        "--header \"apikey: " & $$SUPABASE_KEY & "\" " &
+        "--header \"Authorization: Bearer " & $$SUPABASE_KEY & "\" " &
         "--header \"Content-Type: application/json\" " &
         "--data " & Quote (
             JSONSetElement ( "{}" ;
-                [ "transportista" ; $transporte ; JSONString ]  // "STARKEN" / "RAPPI" / "BLUE", tal cual lo maneja FileMaker hoy
+                [ "transportista" ; $transporte ; JSONString ] ;  // "STARKEN" / "RAPPI" / "BLUE", tal cual lo maneja FileMaker hoy
+                [ "tracking_number" ; $tracking ; JSONString ]
             )
         ) & " " &
         "--max-time 10"
@@ -83,8 +84,8 @@ Insert From URL [ Select target: <ninguno> ; Target: $resultado ;
     "https://kojtfaxzeyfmgqnpckdo.supabase.co/rest/v1/pedidos_despachar?id=eq." & $venta_id ;
     cURL options:
         "-X PATCH " &
-        "--header \"apikey: TU_SUPABASE_SECRET_KEY_ACA\" " &
-        "--header \"Authorization: Bearer TU_SUPABASE_SECRET_KEY_ACA\" " &
+        "--header \"apikey: " & $$SUPABASE_KEY & "\" " &
+        "--header \"Authorization: Bearer " & $$SUPABASE_KEY & "\" " &
         "--header \"Content-Type: application/json\" " &
         "--data " & Quote (
             JSONSetElement ( "{}" ;

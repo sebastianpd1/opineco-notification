@@ -383,6 +383,7 @@ app.get('/api/envios-en-transito', async (req, res) => {
       cliente: p.cliente,
       detalle: p.destino || p.detalle || '',
       estado_texto: p.estado_envio,
+      tracking_number: p.tracking_number,
       fecha: p.created_at,
       sucursal_id: p.sucursal_id,
     }));

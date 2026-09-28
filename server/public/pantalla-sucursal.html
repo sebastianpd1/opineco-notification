@@ -1019,6 +1019,7 @@
           <div class="order-id">${escapeHtml(e.source)} #${escapeHtml(String(e.id))}</div>
           <div class="order-who">${escapeHtml(e.cliente || '')}</div>
           <div class="order-detail">${escapeHtml(e.detalle || '')}</div>
+          ${e.tracking_number ? `<div class="order-detail">Seguimiento: ${escapeHtml(e.tracking_number)}</div>` : ''}
           ${sucursalTagHtml(e.sucursal_id)}
           ${fechaCreacionHtml(e.fecha)}
         </div>
