@@ -284,6 +284,7 @@
     -webkit-mask-image:linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
   }
   .ticker{display:flex; flex-direction:column; gap:10px; animation:scrollUp 14s linear infinite;}
+  .ticker.sin-loop{animation:none !important;}
   .ticker-wrap.slow .ticker{animation-duration:18s;}
   .ticker-wrap.notif .ticker{animation-duration:16s;}
   @keyframes scrollUp{0%{transform:translateY(0);} 100%{transform:translateY(-50%);}}
@@ -823,6 +824,24 @@
     });
   }
 
+  // Si hay pocas tarjetas, el contenido (ni duplicado) llega a llenar el
+  // panel — animarlo igual hace que se vea "dando vueltas" rápido y de
+  // más, sin necesidad. Solo se duplica y anima cuando el contenido real
+  // desborda el panel; si entra completo, queda quieto.
+  function aplicarTicker(ticker, html, pxPorSeg){
+    const wrap = ticker.parentElement;
+    ticker.classList.add('sin-loop');
+    ticker.innerHTML = html;
+    requestAnimationFrame(() => {
+      const desborda = ticker.scrollHeight > wrap.clientHeight + 2;
+      if(desborda){
+        ticker.innerHTML = html + html;
+        ticker.classList.remove('sin-loop');
+        ajustarVelocidadMarquee(ticker, pxPorSeg, true);
+      }
+    });
+  }
+
   // Un color de tarjeta por fuente — se usa en cualquier widget que mezcle
   // despachos de distintos couriers/ML, para reconocer de un vistazo quién
   // es sin leer texto. El orden también define cómo se agrupan al ordenar.
@@ -883,8 +902,7 @@
       `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaCreacionHtml(p.created_at)}</div>`
     ).join('');
     const retirarTicker = document.getElementById('retirarTicker');
-    retirarTicker.innerHTML = retirarHtml + retirarHtml;
-    ajustarVelocidadMarquee(retirarTicker, 20, true);
+    aplicarTicker(retirarTicker, retirarHtml, 20);
 
     // FileMaker no tiene una señal de "ya se despachó" para esta tabla — el
     // cierre es manual: tocar la tarjeta la saca de la lista. Coloreadas por
@@ -931,8 +949,7 @@
 
     document.getElementById('despacharCount').textContent = `${despachar.length + ventasPendientesDespacho.length} nuevos`;
     const despacharTicker = document.getElementById('despacharTicker');
-    despacharTicker.innerHTML = despacharHtmlAll + despacharHtmlAll;
-    ajustarVelocidadMarquee(despacharTicker, 20, true);
+    aplicarTicker(despacharTicker, despacharHtmlAll, 20);
 
     // Widget 3: ya salieron pero el courier/ML todavía no confirma entrega.
     const enviadosFiltrados = mlVisibleAca ? enviados : enviados.filter(e => e.source !== 'ML');
@@ -958,8 +975,7 @@
       </div>`;
     }).join('');
     const enviadosTicker = document.getElementById('enviadosTicker');
-    enviadosTicker.innerHTML = enviadosHtml + enviadosHtml;
-    ajustarVelocidadMarquee(enviadosTicker, 20, true);
+    aplicarTicker(enviadosTicker, enviadosHtml, 20);
   }
 
   async function dismissDespacho(id){
