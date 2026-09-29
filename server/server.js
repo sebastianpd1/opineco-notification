@@ -9,6 +9,7 @@ const { startMercadoLibrePoller, clasificarVenta } = require('./mercadolibre');
 const { startDespachosPoller } = require('./despachos-poller');
 const { enviarPush } = require('./push');
 const { clasificarEnvio } = require('./couriers');
+const { startFilemakerHealthCheck, obtenerEstadoFilemaker } = require('./filemaker-health');
 
 // Red de seguridad: un bug en cualquier integración (Discord, correo, etc.)
 // no debe tumbar el hub entero — acá también vive el dashboard y la API.
@@ -24,6 +25,7 @@ startDiscordBot(supabase);
 startEmailListener(supabase);
 startMercadoLibrePoller(supabase);
 startDespachosPoller(supabase);
+startFilemakerHealthCheck();
 
 // Red de seguridad universal: cualquier alerta sin acuse de recibo que ya
 // tenga más de 24hs se cierra sola — no importa la fuente ni si la señal
@@ -171,6 +173,11 @@ app.get('/api/calendario', async (req, res) => {
     console.error('Error trayendo calendario de opineco.cl:', err.message);
     res.json([]);
   }
+});
+
+// ---------- Estado de FileMaker ----------
+app.get('/api/estado-filemaker', (req, res) => {
+  res.json(obtenerEstadoFilemaker());
 });
 
 // ---------- Sucursales ----------
