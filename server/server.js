@@ -121,16 +121,24 @@ app.use(express.json());
 // quedar pegado indefinidamente en el navegador/PWA y nunca actualizarse
 // solo (problema clásico de PWAs). Se sirven directo acá, antes de
 // express.static, para que ningún Cache-Control por default los pise.
+// Railway (o algún proxy intermedio) igual llegó a servir una versión
+// vieja pese al no-store — se suman headers extra por las dudas, y un
+// query param variable (?_v=) invalidando cualquier caché que mire la URL.
+function sinCache(res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+}
 app.get('/', (req, res) => {
-  res.set('Cache-Control', 'no-store');
+  sinCache(res);
   res.sendFile(path.join(__dirname, 'public', 'pantalla-sucursal.html'));
 });
 app.get('/sw.js', (req, res) => {
-  res.set('Cache-Control', 'no-store');
+  sinCache(res);
   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 app.get('/manifest.json', (req, res) => {
-  res.set('Cache-Control', 'no-store');
+  sinCache(res);
   res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
 });
 
