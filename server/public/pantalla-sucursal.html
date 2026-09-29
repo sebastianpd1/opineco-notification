@@ -135,7 +135,12 @@
 
   /* ---------- Layout con calendario lateral ---------- */
   .layout-con-calendario{display:flex; gap:20px; align-items:stretch; flex:1; min-height:0;}
-  .contenido-principal{flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:20px;}
+  .contenido-principal{flex:1; min-width:0; min-height:0; display:grid; grid-template-columns:1fr 2fr; gap:20px;}
+  /* Columna izquierda: header + alertas + Retirar + toolbar, apilados.
+     La derecha es solo el widget aeropuerto, que así sube hasta arriba
+     al lado del header en vez de dejar ese hueco vacío. */
+  .columna-izq{min-width:0; min-height:0; display:flex; flex-direction:column; gap:20px;}
+  .columna-izq > .panel{flex:1;}
 
   .calendario-lateral{
     width:230px; flex-shrink:0; min-height:0;
@@ -173,7 +178,7 @@
   /* Mismas proporciones de columnas que .main (1fr 2fr) — al dejar la
      2da columna vacía, el banner de alertas queda exactamente tan ancho
      como el panel de "Pedidos a Retirar", no ancho completo. */
-  .alerts-wrapper{display:grid; grid-template-columns:1fr 2fr; gap:20px;}
+  .alerts-wrapper{display:block;}
   .alerts-zone{
     display:flex;
     flex-direction:column;
@@ -219,14 +224,6 @@
   @keyframes marqueeMove{0%{transform:translateX(0);} 100%{transform:translateX(-100%);}}
 
   /* ---------- MAIN GRID: Retirar + widget "aeropuerto" ---------- */
-  .main{
-    display:grid;
-    grid-template-columns:1fr 2fr;
-    grid-template-rows:1fr;
-    gap:20px;
-    flex:1;
-    min-height:0;
-  }
   .panel{
     background:var(--panel);
     border:1px solid var(--panel-line);
@@ -334,8 +331,7 @@
     .header > div:first-child{width:100%;}
     .layout-con-calendario{flex-direction:column;}
     .calendario-lateral{width:100%;}
-    .alerts-wrapper{grid-template-columns:1fr;}
-    .main{grid-template-columns:1fr;}
+    .contenido-principal{grid-template-columns:1fr;}
     .panel{height:260px;}
     .toolbar{flex-wrap:wrap;}
   }
@@ -354,6 +350,7 @@
   </div>
 
   <div class="contenido-principal">
+  <div class="columna-izq">
 
   <!-- HEADER -->
   <div class="header">
@@ -431,8 +428,6 @@
        Despacho y Enviados en el mismo espacio (antes eran 2 paneles fijos
        lado a lado; ahora el calendario ya no está arriba compitiendo por
        espacio, así que este widget combinado puede ser ancho y alto). -->
-  <div class="main">
-
     <div class="panel">
       <div class="panel-head">
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5 12 4l8 4.5-8 4.5-8-4.5Z" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 8.5V16l8 4.5 8-4.5V8.5" stroke="#F0299D" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 13v7.5" stroke="#F0299D" stroke-width="1.4"/></svg>
@@ -444,6 +439,11 @@
       </div>
     </div>
 
+  <div class="toolbar">
+    <button id="btnPush" onclick="activarPush()" style="display:none">🔔 Activar notificaciones</button>
+  </div>
+  </div><!-- /columna-izq -->
+
     <div class="panel panel-airport modo-despachar" id="airportPanel">
       <div class="panel-head">
         <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="11" height="9" rx="1.2" stroke="#fff" stroke-width="1.4"/><path d="M14 10h3.3L20 13v3h-6v-6Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="1.4" stroke="#fff" stroke-width="1.3"/><circle cx="16.5" cy="17.5" r="1.4" stroke="#fff" stroke-width="1.3"/></svg>
@@ -454,12 +454,6 @@
         <div class="ticker" id="airportTicker"></div>
       </div>
     </div>
-
-  </div>
-
-  <div class="toolbar">
-    <button id="btnPush" onclick="activarPush()" style="display:none">🔔 Activar notificaciones</button>
-  </div>
 
   </div><!-- /contenido-principal -->
 </div><!-- /layout-con-calendario -->
@@ -675,7 +669,7 @@
     // Sin esto, el "gap" del contenedor padre sigue reservando espacio
     // arriba y abajo de este banner aunque esté vacío (display:none en el
     // wrapper hace que el gap lo salte del todo, no solo que se vea vacío).
-    wrapper.style.display = alerts.length === 0 ? 'none' : 'grid';
+    wrapper.style.display = alerts.length === 0 ? 'none' : 'block';
     if(alerts.length === 0) return;
 
     if(alerts.length <= 3){
@@ -723,7 +717,7 @@
     waiting_for_label_generation: '#FF3B30', invoice_pending: '#FF3B30', on_hold: '#FF3B30',
 
     printed: '#B45309', ready_to_pack: '#B45309', packed: '#B45309',
-    in_pickup_list: '#B45309', ready_for_pickup: '#B45309', ready_for_dropoff: '#B45309',
+    in_pickup_list: '#B45309', in_packing_list: '#B45309', ready_for_pickup: '#B45309', ready_for_dropoff: '#B45309',
     in_warehouse: '#B45309', in_hub: '#B45309', measures_ready: '#B45309',
 
     picked_up: '#2563EB', dropped_off: '#2563EB', in_transit: '#2563EB',
@@ -743,7 +737,7 @@
     waiting_for_label_generation: 'generando etiqueta', invoice_pending: 'factura pendiente', on_hold: 'en espera',
 
     printed: 'etiqueta impresa', ready_to_pack: 'por embalar', packed: 'embalado',
-    in_pickup_list: 'en lista de retiro', ready_for_pickup: 'listo para retiro', ready_for_dropoff: 'listo para entrega a courier',
+    in_pickup_list: 'en lista de retiro', in_packing_list: 'en preparación', ready_for_pickup: 'listo para retiro', ready_for_dropoff: 'listo para entrega a courier',
     in_warehouse: 'en bodega', in_hub: 'en centro de distribución', measures_ready: 'medidas listas',
 
     picked_up: 'retirado', dropped_off: 'entregado al courier', in_transit: 'en tránsito',
