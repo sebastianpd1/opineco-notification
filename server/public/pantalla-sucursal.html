@@ -41,7 +41,7 @@
       radial-gradient(circle at 85% 8%, rgba(240,41,157,0.30), transparent 45%),
       linear-gradient(135deg, var(--deep) 0%, #3A1C8C 45%, var(--purple) 100%);
     color:var(--white);
-    min-height:100vh;
+    height:100vh;
     padding:40px 24px;
     overflow-x:hidden;
     display:flex;
@@ -256,7 +256,7 @@
   .panel-count{margin-left:auto; font-size:12px; color:var(--dim);}
 
   .ticker-wrap{
-    flex:1; overflow:hidden;
+    flex:1; min-height:0; overflow:hidden;
     mask-image:linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
     -webkit-mask-image:linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
   }
