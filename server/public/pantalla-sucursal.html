@@ -488,10 +488,21 @@
 </div>
 
 <script>
-  // Cada TV de sucursal apunta a esta misma página con ?sucursal=<id> en la
-  // URL del kiosko (ej. https://hub.railway.app/?sucursal=providencia).
-  // Sin el parámetro, cae a "providencia" para que el mockup siga andando solo.
-  const SUCURSAL = new URLSearchParams(location.search).get('sucursal') || 'providencia';
+  // Cada TV/PWA de sucursal apunta a esta misma página con ?sucursal=<id> en
+  // la URL (ej. https://hub.railway.app/?sucursal=renca). El manifest de la
+  // PWA tiene start_url:"/" sin ese parámetro — si el sistema operativo
+  // cierra y reabre la app instalada desde cero (reinicio, ahorro de
+  // energía, etc.), arranca de nuevo desde ese "/" pelado, sin el parámetro.
+  // Por eso se guarda en localStorage apenas se detecta uno en la URL, y se
+  // recupera de ahí si algún día falta — así cada dispositivo vuelve solo a
+  // SU sucursal en vez de caer a un valor fijo que no tiene nada que ver.
+  const paramSucursal = new URLSearchParams(location.search).get('sucursal');
+  if(paramSucursal){
+    try { localStorage.setItem('sucursal_recordada', paramSucursal); } catch {}
+  }
+  let sucursalRecordada = null;
+  try { sucursalRecordada = localStorage.getItem('sucursal_recordada'); } catch {}
+  const SUCURSAL = paramSucursal || sucursalRecordada || 'todas';
   // "todas" es una sucursal especial: no filtra por sucursal_id en ningún
   // endpoint (todos ya soportan "sin filtro = todo"), así queda una vista
   // consolidada de la empresa completa. Acceso: /todas o /?sucursal=todas.
