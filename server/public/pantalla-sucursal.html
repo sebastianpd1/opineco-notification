@@ -423,7 +423,7 @@
   <!-- ALERTAS: mismo ancho que "Pedidos a Retirar" (1 columna de la grilla
        de abajo), no ancho completo — se logra con la misma proporción de
        columnas que .main, dejando la 2da columna vacía. -->
-  <div class="alerts-wrapper">
+  <div class="alerts-wrapper" id="alertsWrapper" style="display:none">
     <div class="alerts-zone" id="alertsZone"></div>
   </div>
 
@@ -666,11 +666,16 @@
   let ultimaAlertsFirma = null;
   function render(){
     const zone = document.getElementById('alertsZone');
+    const wrapper = document.getElementById('alertsWrapper');
     const firma = alerts.map(a => a.id).join(',');
     if(firma === ultimaAlertsFirma) return;
     ultimaAlertsFirma = firma;
 
     zone.innerHTML = '';
+    // Sin esto, el "gap" del contenedor padre sigue reservando espacio
+    // arriba y abajo de este banner aunque esté vacío (display:none en el
+    // wrapper hace que el gap lo salte del todo, no solo que se vea vacío).
+    wrapper.style.display = alerts.length === 0 ? 'none' : 'grid';
     if(alerts.length === 0) return;
 
     if(alerts.length <= 3){
