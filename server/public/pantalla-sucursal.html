@@ -44,15 +44,19 @@
     min-height:100vh;
     padding:40px 24px;
     overflow-x:hidden;
+    display:flex;
+    flex-direction:column;
   }
 
   .page{
     max-width:1560px;
+    width:100%;
     margin:0 auto;
     transform-origin:top center;
     display:flex;
     flex-direction:column;
     gap:20px;
+    flex:1;
   }
 
   /* ---------- HEADER ---------- */
@@ -67,14 +71,14 @@
     font-weight:700;
     font-size:clamp(22px,2.4vw,32px);
   }
-  .sucursal-name-row{display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;}
   .reloj-vivo{
     font-family:'Sora',sans-serif;
     font-weight:700;
-    font-size:clamp(20px,2.2vw,30px);
+    font-size:18px;
     color:var(--dim);
     font-variant-numeric:tabular-nums;
     letter-spacing:.02em;
+    margin-top:4px;
   }
   .sucursal-tag{
     margin-top:4px;
@@ -110,7 +114,8 @@
 
   .acuse-widget{
     display:flex; align-items:center; gap:10px;
-    height:54px;
+    height:54px; width:fit-content;
+    margin-top:14px;
     background:rgba(34,195,94,0.14);
     border:1px solid rgba(34,195,94,0.4);
     border-radius:14px;
@@ -128,7 +133,7 @@
   }
 
   /* ---------- Layout con calendario lateral ---------- */
-  .layout-con-calendario{display:flex; gap:20px; align-items:stretch;}
+  .layout-con-calendario{display:flex; gap:20px; align-items:stretch; flex:1;}
   .contenido-principal{flex:1; min-width:0; display:flex; flex-direction:column; gap:20px;}
 
   .calendario-lateral{
@@ -149,6 +154,7 @@
     background:#3d2d7a; border-radius:10px; padding:8px 10px;
     display:flex; align-items:flex-start; gap:10px;
     border:1px solid transparent;
+    flex:1;
   }
   .cal-lateral-dia.today{border-color:#a78bfa;}
   .cal-lateral-dia .dia-num-wrap{flex-shrink:0; width:38px;}
@@ -161,10 +167,6 @@
     font-size:9px; font-weight:600; line-height:1.2;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     background:#eab308; color:#3d2d10;
-  }
-
-  .fm-aviso{
-    margin-top:6px; font-size:11px; font-weight:700; color:#FF3B30;
   }
 
   /* Mismas proporciones de columnas que .main (1fr 2fr) — al dejar la
@@ -219,14 +221,15 @@
   .main{
     display:grid;
     grid-template-columns:1fr 2fr;
+    grid-template-rows:1fr;
     gap:20px;
+    flex:1;
   }
   .panel{
     background:var(--panel);
     border:1px solid var(--panel-line);
     border-radius:16px;
     padding:18px 20px;
-    height:400px;
     min-width:0;
     display:flex;
     flex-direction:column;
@@ -352,12 +355,9 @@
   <!-- HEADER -->
   <div class="header">
     <div>
-      <div class="sucursal-name-row">
-        <div class="sucursal-name" id="sucursalName">—</div>
-        <div class="reloj-vivo" id="relojVivo">00:00:00</div>
-      </div>
+      <div class="sucursal-name" id="sucursalName">—</div>
+      <div class="reloj-vivo" id="relojVivo">00:00:00</div>
       <div class="sucursal-tag">Opine Company Ltda.</div>
-      <div class="fm-aviso" id="fmAviso" style="display:none">⚠️ FileMaker sin respuesta</div>
 
       <div class="icon-row">
         <div class="app-icon">
@@ -398,12 +398,20 @@
           <span class="label">MercadoLibre</span>
         </div>
 
-        <div class="acuse-widget" id="acuseWidget" style="display:none">
-          <div class="acuse-check">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#0B3D1F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="app-icon" id="fmIcon" style="display:none">
+          <div class="tile" style="background:var(--red)">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1" fill="#fff"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
           </div>
-          <span class="acuse-text" id="acuseText"></span>
+          <span class="label">FileMaker</span>
         </div>
+
+      </div>
+
+      <div class="acuse-widget" id="acuseWidget" style="display:none">
+        <div class="acuse-check">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#0B3D1F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <span class="acuse-text" id="acuseText"></span>
       </div>
 
     </div>
@@ -990,8 +998,9 @@
     count.textContent = airportMode === 'despachar' ? ultimoDespacharCount : ultimoEnviadosCount;
 
     const html = airportMode === 'despachar' ? ultimoDespacharHtml : ultimoEnviadosHtml;
-    // Enviados corre un 50% más rápido que Despacho, misma velocidad base.
-    const velocidad = airportMode === 'despachar' ? 20 : 30;
+    // Base 20px/s +30% = 26. Enviados: 50% más rápido que esa base (39),
+    // +20% extra pedido encima de eso = ~47.
+    const velocidad = airportMode === 'despachar' ? 26 : 47;
 
     aplicarTicker(ticker, html, velocidad, (duracionSeg) => {
       clearTimeout(airportTimer);
@@ -1210,7 +1219,7 @@
   async function fetchEstadoFilemaker(){
     try {
       const estado = await fetch('/api/estado-filemaker').then(r => r.json());
-      document.getElementById('fmAviso').style.display = estado.ok === false ? 'block' : 'none';
+      document.getElementById('fmIcon').style.display = estado.ok === false ? 'block' : 'none';
     } catch { /* si esto falla, mejor no mostrar nada que un falso positivo */ }
   }
 
