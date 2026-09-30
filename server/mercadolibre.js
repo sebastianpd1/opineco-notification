@@ -83,12 +83,14 @@ async function obtenerShipment(shippingId, token) {
 
 // Mismo criterio que ya tenían programado en FileMaker (Case sobre
 // logistic_type/tracking_method) — se replica acá, con un ajuste:
-// "Places Pickup" (envío a sucursal/punto de retiro) también es MERCADO LIBRE.
+// "Places Pickup" (envío a sucursal/punto de retiro) también es MERCADO LIBRE,
+// y los métodos "Melinet ChileExpress ..." son CHILEXPRESS (no Blue).
 function medioEnvioMl(shipment) {
   const tipo = shipment.logistic_type;
   const metodo = shipment.tracking_method;
   if (tipo === 'self_service') return 'FLEX';
   if (tipo === 'xd_drop_off' && (metodo === 'MEL Distribution' || metodo === 'Places Pickup')) return 'MERCADO LIBRE';
+  if (tipo === 'xd_drop_off' && /chilexpress/i.test(metodo || '')) return 'CHILEXPRESS';
   if (tipo === 'xd_drop_off' && metodo !== 'MEL Distribution') return 'BLUEXPRESS';
   return null;
 }

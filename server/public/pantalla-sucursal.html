@@ -783,8 +783,8 @@
 
   // Medio de envío de Mercado Libre — lo calcula el hub (logistic_type +
   // tracking_method, mismo criterio que ya tenían en FileMaker).
-  const MEDIO_COLORES = { FLEX: '#0E9F8C', 'MERCADO LIBRE': '#B45309', BLUEXPRESS: '#1565C0' };
-  const MEDIO_ORDEN = ['FLEX', 'MERCADO LIBRE', 'BLUEXPRESS'];
+  const MEDIO_COLORES = { FLEX: '#0E9F8C', 'MERCADO LIBRE': '#B45309', BLUEXPRESS: '#1565C0', CHILEXPRESS: '#C62828' };
+  const MEDIO_ORDEN = ['FLEX', 'MERCADO LIBRE', 'BLUEXPRESS', 'CHILEXPRESS'];
   function medioEnvioBadgeHtml(medio){
     if(!medio) return '';
     const color = MEDIO_COLORES[medio] || '#4B5563';
@@ -867,7 +867,7 @@
     return '';
   }
   // Sort anidado: 1) por fuente (mismo orden que los colores), 2) dentro de
-  // Mercado Libre, por medio de envío (FLEX / MERCADO LIBRE / BLUEXPRESS),
+  // Mercado Libre, por medio de envío (FLEX / MERCADO LIBRE / BLUEXPRESS / CHILEXPRESS),
   // 3) por fecha de ingreso (más antiguo primero, igual que el resto de los
   // tickers de la pantalla).
   function ordenarPorFuente(items){

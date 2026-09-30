@@ -89,7 +89,7 @@ alter table pedidos_despachar add column if not exists estado_envio text;
 -- puntual. Ver server/mercadolibre.js.
 alter table pedidos_retirar alter column sucursal_id drop not null;
 
--- Medio de envío de Mercado Libre (FLEX / MERCADO LIBRE / BLUEXPRESS) —
+-- Medio de envío de Mercado Libre (FLEX / MERCADO LIBRE / BLUEXPRESS / CHILEXPRESS) —
 -- se calcula solo en server/mercadolibre.js a partir de logistic_type y
 -- tracking_method del shipment, mismo criterio que ya tenían en FileMaker.
 alter table ventas_mercadolibre add column if not exists medio_envio text;

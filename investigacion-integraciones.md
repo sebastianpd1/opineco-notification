@@ -146,7 +146,9 @@ Los access tokens de las 3 cuentas activas **no están en Supabase** — viven e
 
 - **`self_service`** → `FLEX`. El vendedor entrega directo (o coordina un repartidor propio/tercero) — no pasa por un Place ni por un HUB de ML.
 - **`xd_drop_off`** con `tracking_method = "MEL Distribution"` → `MERCADO LIBRE`. Ruta: Vendedor → **Place** (tienda con logo de ML/Pickit/HOP en la puerta) → Colecta → HUB de ML → Carrier → Comprador. El vendedor deja el paquete en un Place, no en un correo.
-- **`xd_drop_off`** con `tracking_method = "Places Pickup"` (envío a sucursal/punto de retiro) → también `MERCADO LIBRE` (ajuste acordado; el resto de `xd_drop_off` sigue como `BLUEXPRESS`).- **`xd_drop_off`** con otro `tracking_method` → `BLUEXPRESS`.
+- **`xd_drop_off`** con `tracking_method = "Places Pickup"` (envío a sucursal/punto de retiro) → también `MERCADO LIBRE` (ajuste acordado; el resto de `xd_drop_off` sigue como `BLUEXPRESS`).
+- **`xd_drop_off`** con `tracking_method` que contiene "ChileExpress" (ej. "Melinet ChileExpress - Sucursal") → `CHILEXPRESS`.
+- **`xd_drop_off`** con otro `tracking_method` (ej. "Bluexpress Prioritario sucursal a puerta") → `BLUEXPRESS`.
 - **`drop_off`** (sin `xd_`) es distinto de `xd_drop_off`: acá el vendedor lleva el paquete directo a la oficina del correo/carrier asignado (sin pasar por Place ni HUB de ML). Ruta: Vendedor → Carrier → Comprador. Hoy no se usa `medio_envio` para diferenciarlo porque no lo vimos aparecer en los envíos reales de las 3 cuentas — si aparece, revisar `medioEnvioMl` para agregarlo.
 
 **Búsqueda fallida (2026-09-24) — hora límite para llevar el paquete al Place/correo:**
