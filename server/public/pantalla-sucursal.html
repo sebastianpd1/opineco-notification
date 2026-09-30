@@ -265,6 +265,15 @@
 
   .order-card{background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09); border-radius:10px; padding:10px 12px;}
   #airportTicker .order-card, #retirarTicker .order-card{cursor:pointer;}
+  /* Número de posición a la izquierda de cada tarjeta, para no perder la
+     cuenta de en cuál va cuando son muchas. */
+  .card-row{display:flex; align-items:center; gap:12px;}
+  .card-row > .order-card{flex:1; min-width:0;}
+  .card-num{
+    flex-shrink:0; min-width:38px; text-align:right;
+    font-family:'Sora',sans-serif; font-weight:800; font-size:26px;
+    color:rgba(255,255,255,0.85); font-variant-numeric:tabular-nums;
+  }
   .order-id{font-family:'Sora',sans-serif; font-size:13px; font-weight:600; color:var(--pink);}
   .order-who{font-size:14px; font-weight:600; margin-top:2px;}
   .order-detail{font-size:12px; color:var(--dim); margin-top:2px;}
@@ -291,9 +300,9 @@
      de fondo dice quién es de un vistazo, sin tener que leer texto.
      Se usan en todos los widgets donde puede aparecer una tarjeta de
      despacho (Pedidos a Despachar y Enviados). */
-  .order-card.starken-card{background:#166534; border-color:#166534; cursor:default;}
-  .order-card.rappi-card{background:#C2185B; border-color:#C2185B; cursor:default;}
-  .order-card.blue-card{background:#14213D; border-color:#14213D; cursor:default;}
+  .order-card.starken-card{background:#166534; border-color:#166534;}
+  .order-card.rappi-card{background:#C2185B; border-color:#C2185B;}
+  .order-card.blue-card{background:#14213D; border-color:#14213D;}
   .order-card.starken-card .order-id,
   .order-card.rappi-card .order-id,
   .order-card.blue-card .order-id{color:#fff;}
@@ -879,6 +888,10 @@
     });
   }
 
+  function filaNumerada(n, cardHtml){
+    return `<div class="card-row"><div class="card-num">${n}</div>${cardHtml}</div>`;
+  }
+
   let primerFetchPedidos = true;
   let idsRetirarAntes = new Set();
   let idsVentasMlAntes = new Set();
@@ -902,9 +915,9 @@
     idsVentasMlAntes = new Set(ventasMl.map(v => v.order_id));
 
     document.getElementById('retirarCount').textContent = `${retirar.length} pendientes`;
-    const retirarHtml = retirar.map(p =>
+    const retirarHtml = retirar.map((p, i) => filaNumerada(i + 1,
       `<div class="order-card" data-id="${escapeHtml(p.id)}"><div class="order-id">#${escapeHtml(p.id)}</div><div class="order-who">${escapeHtml(p.cliente)}</div>${p.detalle ? `<div class="order-detail">${escapeHtml(p.detalle)}</div>` : ''}${sucursalTagHtml(p.sucursal_id)}${fechaCreacionHtml(p.created_at)}</div>`
-    ).join('');
+    )).join('');
     const retirarTicker = document.getElementById('retirarTicker');
     aplicarTicker(retirarTicker, retirarHtml, 20);
 
@@ -926,7 +939,7 @@
     const ventasPendientesDespacho = mlVisibleAca ? ventasMl : [];
 
     const despacharOrdenado = ordenarPorFuente([...despacharItems, ...ventasPendientesDespacho.map(v => ({...v, source: 'ML'}))]);
-    const despacharHtmlAll = despacharOrdenado.map(item => {
+    const despacharHtmlAll = despacharOrdenado.map((item, i) => filaNumerada(i + 1, (() => {
       if(item.source === 'ML'){
         const it = (item.items && item.items[0]) || {};
         return `<div class="order-card ml-card">
@@ -942,14 +955,11 @@
           </div>
         </div>`;
       }
-      // Solo se puede tocar para cerrar cuando NO hay courier reconocido —
-      // los que sí tienen (Starken/Rappi/Blue) se cierran solos cuando
-      // FileMaker manda el estado final. Si se pudiera tocar igual, alguien
-      // la termina borrando antes de que llegue a "Enviados" (pasó de
-      // verdad con un despacho de Blue Express).
-      const idAttr = item.source ? '' : ` data-id="${escapeHtml(item.id)}"`;
+      // Cualquier despacho que viene de FileMaker se puede tocar para
+      // borrarlo (p. ej. duplicados). Las de ML no: vienen de la API de ML.
+      const idAttr = ` data-id="${escapeHtml(item.id)}"`;
       return `<div class="order-card ${claseFuente(item.source)}"${idAttr}><div class="order-id">#${escapeHtml(item.id)}</div><div class="order-who">${escapeHtml(item.cliente)}</div>${sucursalTagHtml(item.sucursal_id)}${fechaCreacionHtml(item.created_at)}</div>`;
-    }).join('');
+    })())).join('');
 
     // Widget "aeropuerto": en vez de 2 paneles fijos lado a lado, uno solo
     // que alterna entre Pedidos a Despachar y Enviados en el mismo espacio
@@ -961,7 +971,7 @@
 
     const enviadosFiltrados = mlVisibleAca ? enviados : enviados.filter(e => e.source !== 'ML');
     const enviadosOrdenados = ordenarPorFuente(enviadosFiltrados);
-    ultimoEnviadosHtml = enviadosOrdenados.map(e => {
+    ultimoEnviadosHtml = enviadosOrdenados.map((e, i) => filaNumerada(i + 1, (() => {
       const estadoTexto = e.source === 'ML' ? estadoBadgeHtml(e.estado_status, e.estado_substatus) : `<span class="estado-badge" style="background:rgba(255,255,255,0.25)">${escapeHtml(textoEstadoCourier(e.source, e.estado_texto))}</span>`;
       return `<div class="order-card ${claseFuente(e.source)}" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <div style="min-width:0;">
@@ -977,7 +987,7 @@
           ${estadoTexto}
         </div>
       </div>`;
-    }).join('');
+    })())).join('');
     ultimoEnviadosCount = `${enviadosOrdenados.length} en camino`;
 
     if(!airportIniciado){ airportIniciado = true; renderAirport(); }
