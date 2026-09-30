@@ -400,8 +400,9 @@
         </div>
 
         <div class="app-icon" id="fmIcon" style="display:none">
-          <div class="tile" style="background:var(--red)">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1" fill="#fff"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          <div class="tile" id="fmTile" style="background:var(--red)">
+            <svg id="fmSvgError" viewBox="0 0 24 24" fill="none"><path d="M12 9v4" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1" fill="#fff"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <svg id="fmSvgOk" viewBox="0 0 24 24" fill="none" style="display:none"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <span class="label">FileMaker</span>
         </div>
@@ -1217,12 +1218,17 @@
 
   // Estado de FileMaker (server/filemaker-health.js chequea cada 10 min del
   // lado del servidor) — acá solo se consulta el último resultado y se
-  // muestra el aviso si está caído. null = todavía no se chequeó ninguna
+  // muestra el ícono: verde con check si responde, rojo si está caído. null = todavía no se chequeó ninguna
   // vez, no muestra nada (no es lo mismo que "está mal").
   async function fetchEstadoFilemaker(){
     try {
       const estado = await fetch('/api/estado-filemaker').then(r => r.json());
-      document.getElementById('fmIcon').style.display = estado.ok === false ? 'block' : 'none';
+      // null = todavía no se chequeó ninguna vez: no se muestra nada.
+      const fmIcon = document.getElementById('fmIcon');
+      fmIcon.style.display = estado.ok === null ? 'none' : 'block';
+      document.getElementById('fmTile').style.background = estado.ok ? 'var(--tawk)' : 'var(--red)';
+      document.getElementById('fmSvgOk').style.display = estado.ok ? 'block' : 'none';
+      document.getElementById('fmSvgError').style.display = estado.ok ? 'none' : 'block';
     } catch { /* si esto falla, mejor no mostrar nada que un falso positivo */ }
   }
 
