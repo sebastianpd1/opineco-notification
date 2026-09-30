@@ -82,13 +82,13 @@ async function obtenerShipment(shippingId, token) {
 }
 
 // Mismo criterio que ya tenían programado en FileMaker (Case sobre
-// logistic_type/tracking_method) — se replica acá tal cual para no
-// duplicar lógica entre los dos sistemas más de lo necesario.
+// logistic_type/tracking_method) — se replica acá, con un ajuste:
+// "Places Pickup" (envío a sucursal/punto de retiro) también es MERCADO LIBRE.
 function medioEnvioMl(shipment) {
   const tipo = shipment.logistic_type;
   const metodo = shipment.tracking_method;
   if (tipo === 'self_service') return 'FLEX';
-  if (tipo === 'xd_drop_off' && metodo === 'MEL Distribution') return 'MERCADO LIBRE';
+  if (tipo === 'xd_drop_off' && (metodo === 'MEL Distribution' || metodo === 'Places Pickup')) return 'MERCADO LIBRE';
   if (tipo === 'xd_drop_off' && metodo !== 'MEL Distribution') return 'BLUEXPRESS';
   return null;
 }
