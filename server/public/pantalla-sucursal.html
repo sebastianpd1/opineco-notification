@@ -343,6 +343,9 @@
     .calendario-lateral{width:100%;}
     .contenido-principal{grid-template-columns:1fr;}
     .panel{height:260px;}
+    /* flex:1 (desktop) le quita la altura fija y el panel crece hasta
+       mostrar todo el contenido — sin desborde no hay marquee vertical. */
+    .columna-izq > .panel{flex:none; height:260px;}
     .toolbar{flex-wrap:wrap;}
   }
 </style>
@@ -1056,9 +1059,10 @@
       el.textContent = n;
       el.style.display = n > 0 ? 'flex' : 'none';
     }
-    // El correo no pasa por el banner rojo (a propósito, ver server.js), así
-    // que su campanita se dispara acá, comparando contra el conteo anterior.
-    if(!primerFetchBadgeCounts && (counts.correo || 0) > (ultimosCounts.correo || 0)) sonarCampana();
+    // Correo, Discord y Tawk no pasan por el banner rojo (a propósito, ver
+    // server.js), así que su campanita se dispara acá, comparando contra el
+    // conteo anterior de cada uno. Una sola campana aunque suban varios.
+    if(!primerFetchBadgeCounts && ['correo','discord','tawk'].some(k => (counts[k] || 0) > (ultimosCounts[k] || 0))) sonarCampana();
     primerFetchBadgeCounts = false;
     ultimosCounts = counts;
     actualizarBadgeApp();
