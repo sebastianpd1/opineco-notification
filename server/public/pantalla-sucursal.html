@@ -1240,22 +1240,36 @@
   setInterval(fetchVentasML, 30000);
   setInterval(fetchEstadoFilemaker, 60000);
 
-  // Los navegadores de TV (kiosko, control remoto) normalmente no pueden
-  // hacer scroll — si el contenido termina siendo más alto que la pantalla
-  // real, se ve "cortado" abajo sin ninguna forma de verlo. Acá se achica
-  // toda la página en conjunto (nunca se agranda) para que siempre entre
-  // completa. En celular no se toca nada, ahí sí se puede scrollear normal.
+  // Pantallas "chicas" en píxeles CSS (la TV reporta ~960px de ancho aunque
+  // sea de 32") dejaban la columna izquierda tan angosta que los íconos se
+  // partían en 2 filas y "Pedidos a Retirar" quedaba aplastado. En vez de
+  // reacomodar, se arma la página con el mismo ancho base que en el Mac y se
+  // escala entera para que calce justo en la pantalla — se ve idéntica,
+  // solo más chica. En pantallas >= ANCHO_BASE y en celular no se toca.
+  const ANCHO_BASE = 1400;
   function ajustarEscalaPantalla(){
     const pagina = document.querySelector('.page');
-    if(window.innerWidth <= 720){ pagina.style.transform = 'none'; return; }
-    pagina.style.transform = 'none';
-    const alturaDisponible = window.innerHeight - 24;
-    const alturaContenido = pagina.scrollHeight;
-    const escala = Math.min(1, alturaDisponible / alturaContenido);
-    pagina.style.transform = escala < 1 ? `scale(${escala})` : 'none';
+    const cuerpo = document.body;
+    const escala = window.innerWidth / ANCHO_BASE;
+    if(window.innerWidth <= 720 || escala >= 1){
+      pagina.style.cssText = '';
+      cuerpo.style.overflow = '';
+      return;
+    }
+    const estilo = getComputedStyle(cuerpo);
+    const padX = parseFloat(estilo.paddingLeft) + parseFloat(estilo.paddingRight);
+    const padY = parseFloat(estilo.paddingTop) + parseFloat(estilo.paddingBottom);
+    cuerpo.style.overflow = 'hidden';
+    pagina.style.flex = 'none';
+    pagina.style.maxWidth = 'none';
+    pagina.style.margin = '0';
+    pagina.style.transformOrigin = 'top left';
+    pagina.style.width = ((window.innerWidth - padX) / escala) + 'px';
+    pagina.style.height = ((window.innerHeight - padY) / escala) + 'px';
+    pagina.style.transform = `scale(${escala})`;
   }
   window.addEventListener('resize', ajustarEscalaPantalla);
-  setInterval(ajustarEscalaPantalla, 5000);
+  ajustarEscalaPantalla();
   setTimeout(ajustarEscalaPantalla, 1500);
 </script>
 
