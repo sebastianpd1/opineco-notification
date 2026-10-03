@@ -21,7 +21,8 @@ CSV de FileMaker → agrupar por marca + números → Agente 1 (criterio + Googl
 
 1. Instalar Claude Code: https://code.claude.com/docs/en/setup
 2. Clonar este repositorio y entrar a esta carpeta: `cd opineco-notification/normalizador`
-3. `python3 -m pip install -r requirements.txt` (usa el Google Chrome que ya tienes instalado).
+3. `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (entorno virtual del
+   proyecto; `norma.py` lo usa solo. Usa el Google Chrome que ya tienes instalado).
 4. `python3 norma.py chrome` → acepta las cookies de Google (e inicia sesión si quieres) y cierra.
 
 ## Exportar desde FileMaker

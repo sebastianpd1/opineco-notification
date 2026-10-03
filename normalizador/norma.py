@@ -18,6 +18,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import random
 import re
 import sqlite3
@@ -28,6 +29,12 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 BASE = Path(__file__).resolve().parent
+
+# Si existe el entorno virtual del proyecto (.venv, donde está Playwright), correr siempre con él,
+# así "python3 norma.py" funciona igual desde la Terminal o desde Claude Code.
+_VENV_PY = BASE / ".venv" / "bin" / "python3"
+if _VENV_PY.exists() and Path(sys.prefix).resolve() != (BASE / ".venv").resolve():
+    os.execv(str(_VENV_PY), [str(_VENV_PY), *sys.argv])
 DATOS = BASE / "datos"
 DB = DATOS / "normalizador.db"
 PERFIL_CHROME = DATOS / "perfil-chrome"
