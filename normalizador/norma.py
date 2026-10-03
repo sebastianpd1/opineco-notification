@@ -28,6 +28,11 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote_plus
 
+try:
+    from playwright.sync_api import Error as PlaywrightError
+except ImportError:  # sin Playwright igual funcionan importar/lotes/exportar
+    PlaywrightError = Exception
+
 BASE = Path(__file__).resolve().parent
 
 # Si existe el entorno virtual del proyecto (.venv, donde está Playwright), correr siempre con él,
@@ -353,17 +358,31 @@ JS_RESULTADOS = """() => {
 
 def abrir_chrome(p):
     PERFIL_CHROME.mkdir(parents=True, exist_ok=True)
-    ctx = p.chromium.launch_persistent_context(str(PERFIL_CHROME), channel="chrome", headless=False)
+    ctx = p.chromium.launch_persistent_context(
+        str(PERFIL_CHROME), channel="chrome", headless=False,
+        # Chrome normal, sin el aviso "controlado por software de prueba".
+        ignore_default_args=["--enable-automation"],
+        args=["--disable-blink-features=AutomationControlled"])
     return ctx, (ctx.pages[0] if ctx.pages else ctx.new_page())
 
 
 def hay_captcha(page):
-    if "/sorry/" in page.url:
-        return True
-    if page.query_selector("#captcha-form, iframe[src*='recaptcha']"):
-        return True
-    cuerpo = plano(page.inner_text("body")[:3000]) if page.query_selector("body") else ""
-    return "unusual traffic" in cuerpo or "trafico inusual" in cuerpo
+    try:
+        if "/sorry/" in page.url:
+            return True
+        if page.query_selector("#captcha-form, iframe[src*='recaptcha']"):
+            return True
+        cuerpo = plano(page.inner_text("body")[:3000]) if page.query_selector("body") else ""
+        return "unusual traffic" in cuerpo or "trafico inusual" in cuerpo
+    except PlaywrightError:
+        return True  # la página está cambiando (por ejemplo, justo al resolver el captcha): revisar de nuevo
+
+
+def hay_resultados(page):
+    try:
+        return page.query_selector("#search, #rso") is not None
+    except PlaywrightError:
+        return False
 
 
 def esperar_captcha(page):
@@ -374,7 +393,9 @@ def esperar_captcha(page):
     fin = time.time() + 600
     while time.time() < fin:
         page.wait_for_timeout(3000)
-        if not hay_captcha(page) and page.query_selector("#search, #rso"):
+        if not hay_captcha(page) and hay_resultados(page):
+            page.wait_for_load_state("domcontentloaded")
+            print("Verificación resuelta, sigo.", file=sys.stderr)
             return
     sys.exit("Captcha sin resolver: detén el loop y vuelve a intentar más tarde.")
 
@@ -402,7 +423,12 @@ def cmd_google(a):
                   wait_until="domcontentloaded")
         esperar_captcha(page)
         page.wait_for_timeout(1500)
-        resultados = page.evaluate(JS_RESULTADOS)
+        try:
+            resultados = page.evaluate(JS_RESULTADOS)
+        except PlaywrightError:  # Google redirigió justo en ese momento: esperar y leer otra vez
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(2000)
+            resultados = page.evaluate(JS_RESULTADOS)
         ctx.close()
     c.execute("insert or replace into busquedas values(?,?,?)",
               (consulta, json.dumps(resultados, ensure_ascii=False), time.time()))
@@ -416,9 +442,8 @@ def cmd_chrome(_a):
     with sync_playwright() as p:
         ctx, page = abrir_chrome(p)
         page.goto("https://www.google.com/?hl=es")
-        print("Chrome abierto. Acepta las cookies e inicia sesión en Google si quieres; "
-              "luego cierra la ventana.")
-        page.wait_for_event("close", timeout=0)
+        input("Chrome abierto. Acepta las cookies e inicia sesión en Google si quieres.\n"
+              "Cuando termines, vuelve aquí y presiona Enter... ")
         ctx.close()
 
 
