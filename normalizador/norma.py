@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Normalizador de impresoras — herramienta que usa Claude Code para recorrer COMPATIBILITY.
+"""Normalizador de impresoras — herramienta que usa Claude Code para normalizar compatibilidades.
 
 Comandos (todos con: python3 norma.py <comando> ...):
-  importar <archivo.csv>        Carga el CSV exportado de FileMaker (ID, Brand, COMPATIBILITY, ImpresoraNormalizada).
+  importar --inventario X --normalizada Y --compatibilidad Z
+                                Carga los 3 CSV de FileMaker (ver README). SKU con normalizada usan esa;
+                                el resto, COMPATIBILITY.
   estado                        Cuántos registros hay en cada estado.
   siguiente-lote [--grupos N]   Próximos N grupos pendientes (marca + números) en JSON.
   google "<consulta>"           Busca en Google con Chrome (Playwright) y devuelve los 10 primeros resultados.
@@ -39,15 +41,20 @@ SEPARADORES = re.compile(r"[\x0b\n\r;,|]+")
 
 ESQUEMA = """
 create table if not exists registros(
-  rid text primary key,            -- ID de FileMaker, o ID#n si el campo traía varias impresoras
-  fm_id text, marca_fm text, texto text, normalizada_actual text,
+  rid text primary key,            -- N:<sku>:<n> (normalizada) o C:<ID>[#n] (COMPATIBILITY)
+  origen text,                     -- NORMALIZADA o COMPATIBILITY
+  sku text, fm_id text, marca_fm text, nro_parte text, categoria text, texto text,
   grupo text,                      -- MARCA|números, la búsqueda "solo números" del flujo
   estado text default 'PENDIENTE', -- PENDIENTE, PROPUESTO, APROBADO, REVISION_HUMANA
   marca text, familia text, modelo text, variante text, nombre text,
   evidencia_titulo text, evidencia_url text, nota text, motivo_verificador text,
   actualizado real);
-create index if not exists ix_grupo on registros(grupo);
+create index if not exists ix_grupo on registros(grupo, estado);
 create index if not exists ix_estado on registros(estado);
+create index if not exists ix_nombre on registros(nombre, estado);
+-- Texto crudo de COMPATIBILITY de todos los SKU: sirve para contrastar la normalizada (que tuvo alucinaciones).
+create table if not exists compat_crudo(sku text, texto text);
+create index if not exists ix_crudo on compat_crudo(sku);
 create table if not exists busquedas(consulta text primary key, resultados text, fecha real);
 create table if not exists meta(k text primary key, v text);
 """
@@ -71,11 +78,14 @@ def solo_digitos(s):
     return re.sub(r"\D", "", s or "")
 
 
-def clave_grupo(marca, texto):
+def nucleo(texto):
     t = plano(texto).upper()
     numeros = re.findall(r"\d{2,}", t)
-    nucleo = numeros[-1] if numeros else re.sub(r"[^A-Z0-9]", "", t)[:12]
-    return f"{(marca or 'SIN MARCA').strip().upper()}|{nucleo}"
+    return numeros[-1] if numeros else re.sub(r"[^A-Z0-9]", "", t)[:12]
+
+
+def clave_grupo(marca, texto):
+    return f"{(marca or 'SIN MARCA').strip().upper()}|{nucleo(texto)}"
 
 
 def leer_csv(ruta):
@@ -87,7 +97,19 @@ def leer_csv(ruta):
         except UnicodeDecodeError:
             continue
     # csv acepta \r (Mac antiguo, lo usa FileMaker), \n y \r\n como fin de fila.
-    return list(csv.reader(io.StringIO(texto, newline="")))
+    filas = [f for f in csv.reader(io.StringIO(texto, newline="")) if any(x.strip() for x in f)]
+    # FileMaker no exporta encabezados en CSV; si alguien los dejó, se saltan.
+    if filas and filas[0][0].strip().upper() in ("ID", "SKU", "ITEM"):
+        filas = filas[1:]
+    return filas
+
+
+def celda(fila, i):
+    return fila[i].strip() if len(fila) > i else ""
+
+
+def piezas(texto):
+    return [p.strip() for p in SEPARADORES.split(texto or "") if p.strip()]
 
 
 def leer_json(origen):
@@ -103,23 +125,51 @@ def salir_json(obj):
 # ---------------------------------------------------------------- importar / estado
 
 def cmd_importar(a):
+    """Inventario: Item, NroParte, Marca, Categoria.
+    Normalizada: SKU, Marca, Impresora, Categoria.
+    Compatibility: ID, InventoryItem, Brand, Printer.
+    Los SKU con filas en la normalizada se trabajan con ella; el resto con COMPATIBILITY."""
     c = conectar()
-    nuevos = 0
-    for fila in leer_csv(a.archivo):
-        if len(fila) < 3 or not fila[0].strip() or fila[0].strip().upper() == "ID":
-            continue
-        fm_id, marca, compat = fila[0].strip(), fila[1].strip(), fila[2]
-        actual = fila[3].strip() if len(fila) > 3 else ""
-        piezas = [p.strip() for p in SEPARADORES.split(compat) if p.strip()]
-        for i, pieza in enumerate(piezas, 1):
-            rid = fm_id if len(piezas) == 1 else f"{fm_id}#{i}"
-            cur = c.execute(
-                "insert or ignore into registros(rid, fm_id, marca_fm, texto, normalizada_actual, grupo)"
-                " values(?,?,?,?,?,?)",
-                (rid, fm_id, marca, pieza, actual, clave_grupo(marca, pieza)))
-            nuevos += cur.rowcount
+    inventario = {}
+    for f in leer_csv(a.inventario):
+        inventario[celda(f, 0)] = {"nro_parte": celda(f, 1), "marca": celda(f, 2), "categoria": celda(f, 3)}
+
+    normalizada = [f for f in leer_csv(a.normalizada) if celda(f, 0) and celda(f, 2)]
+    skus_normalizados = {celda(f, 0) for f in normalizada}
+    compat = [f for f in leer_csv(a.compatibilidad) if celda(f, 1) and celda(f, 3)]
+
+    def insertar(rid, origen, sku, fm_id, marca, categoria, texto):
+        inv = inventario.get(sku, {})
+        marca = marca or inv.get("marca", "")
+        cur = c.execute(
+            "insert or ignore into registros(rid, origen, sku, fm_id, marca_fm, nro_parte, categoria, texto, grupo)"
+            " values(?,?,?,?,?,?,?,?,?)",
+            (rid, origen, sku, fm_id, marca, inv.get("nro_parte", ""),
+             categoria or inv.get("categoria", ""), texto, clave_grupo(marca, texto)))
+        return cur.rowcount
+
+    nuevos = {"NORMALIZADA": 0, "COMPATIBILITY": 0}
+    vistos = {}
+    for f in normalizada:
+        sku = celda(f, 0)
+        for texto in piezas(celda(f, 2)):
+            vistos[sku] = vistos.get(sku, 0) + 1
+            nuevos["NORMALIZADA"] += insertar(f"N:{sku}:{vistos[sku]}", "NORMALIZADA", sku, "",
+                                              celda(f, 1), celda(f, 3), texto)
+    c.execute("delete from compat_crudo")
+    for f in compat:
+        fm_id, sku = celda(f, 0), celda(f, 1)
+        partes = piezas(celda(f, 3))
+        for i, texto in enumerate(partes, 1):
+            c.execute("insert into compat_crudo values(?,?)", (sku, texto))
+            if sku in skus_normalizados:
+                continue
+            rid = f"C:{fm_id}" if len(partes) == 1 else f"C:{fm_id}#{i}"
+            nuevos["COMPATIBILITY"] += insertar(rid, "COMPATIBILITY", sku, fm_id, celda(f, 2), "", texto)
     c.commit()
-    print(f"Importados {nuevos} registros nuevos.")
+    sin_inv = len(({celda(f, 0) for f in normalizada} | {celda(f, 1) for f in compat}) - set(inventario))
+    salir_json({"registros_nuevos": nuevos, "skus_con_normalizada": len(skus_normalizados),
+                "skus_sin_ficha_en_inventario": sin_inv})
     cmd_estado(a)
 
 
@@ -135,24 +185,33 @@ def cmd_estado(_a):
 # ---------------------------------------------------------------- agente 1
 
 def cmd_siguiente_lote(a):
+    """Cada grupo trae los textos distintos (no cada fila): así una decisión cubre todas sus repeticiones."""
     c = conectar()
     grupos = [f[0] for f in c.execute(
         "select grupo from registros where estado='PENDIENTE' group by grupo order by grupo limit ?",
         (a.grupos,))]
     lote = []
     for g in grupos:
-        pendientes = c.execute(
-            "select rid, texto, normalizada_actual from registros where grupo=? and estado='PENDIENTE'"
-            " order by rid limit ?", (g, a.max_registros)).fetchall()
-        total = c.execute("select count(*) from registros where grupo=? and estado='PENDIENTE'", (g,)).fetchone()[0]
+        textos = []
+        for f in c.execute(
+                "select texto, origen, count(*) n, group_concat(distinct sku) skus,"
+                " group_concat(distinct categoria) cats, group_concat(distinct nro_parte) partes"
+                " from registros where grupo=? and estado='PENDIENTE'"
+                " group by texto, origen order by n desc limit ?", (g, a.max_textos)):
+            item = {"texto": f["texto"], "origen": f["origen"], "veces": f["n"],
+                    "skus": (f["skus"] or "").split(",")[:5],
+                    "categorias": (f["cats"] or "").split(",")[:5],
+                    "nros_parte": [p for p in (f["partes"] or "").split(",") if p][:5]}
+            if f["origen"] == "NORMALIZADA":
+                # Lo que decía COMPATIBILITY para esos mismos SKU con los mismos números: contraste anti-alucinación.
+                crudos = {r[0] for r in c.execute(
+                    f"select distinct texto from compat_crudo where sku in ({','.join('?' * len(item['skus']))})",
+                    item["skus"]) if nucleo(r[0]) == g.split("|", 1)[1]}
+                item["en_compatibility_original"] = sorted(crudos)[:8]
+            textos.append(item)
         ya = [f[0] for f in c.execute(
             "select distinct nombre from registros where grupo=? and estado='APROBADO'", (g,))]
-        lote.append({
-            "grupo": g,
-            "pendientes_total": total,
-            "registros": [dict(f) for f in pendientes],
-            "ya_aprobados_en_este_grupo": ya,
-        })
+        lote.append({"grupo": g, "textos": textos, "ya_aprobados_en_este_grupo": ya})
     salir_json(lote)
 
 
@@ -168,15 +227,35 @@ def evidencia_existe(c, titulo):
     return False
 
 
+def rids_de(c, d, estado):
+    """Una decisión apunta a registros por 'rids', o por 'grupo' + 'textos' (todas sus repeticiones)."""
+    if d.get("rids") or d.get("rid"):
+        return d.get("rids") or [d["rid"]]
+    if d.get("grupo") and d.get("textos"):
+        marcas = ",".join("?" * len(d["textos"]))
+        return [r[0] for r in c.execute(
+            f"select rid from registros where grupo=? and estado=? and texto in ({marcas})",
+            [d["grupo"], estado, *d["textos"]])]
+    if d.get("nombre") and estado == "PROPUESTO":
+        sql, args = "select rid from registros where nombre=? and estado='PROPUESTO'", [d["nombre"]]
+        if d.get("textos"):
+            sql += f" and texto in ({','.join('?' * len(d['textos']))})"
+            args += d["textos"]
+        return [r[0] for r in c.execute(sql, args)]
+    return []
+
+
 def cmd_proponer(a):
     c = conectar()
-    resumen = {"PROPUESTO": 0, "REVISION_HUMANA": 0, "ignorados": []}
+    resumen = {"PROPUESTO": 0, "REVISION_HUMANA": 0, "sin_registros": []}
     for d in leer_json(a.archivo):
-        rids = d.get("rids") or ([d["rid"]] if d.get("rid") else [])
+        rids = rids_de(c, d, "PENDIENTE")
+        if not rids:
+            resumen["sin_registros"].append(d.get("textos") or d.get("rids") or d.get("rid"))
+            continue
         for rid in rids:
             fila = c.execute("select texto, estado from registros where rid=?", (rid,)).fetchone()
             if not fila or fila["estado"] != "PENDIENTE":
-                resumen["ignorados"].append(rid)
                 continue
             estado, nota = "PROPUESTO", d.get("nota") or ""
             if d.get("estado") != "OK":
@@ -210,38 +289,36 @@ def cmd_lote_verificar(a):
         (a.n,))]
     salida = []
     for nombre in nombres:
-        filas = c.execute(
-            "select rid, texto, marca, familia, modelo, variante, evidencia_titulo, evidencia_url, nota"
-            " from registros where estado='PROPUESTO' and nombre=?", (nombre,)).fetchall()
-        f0 = filas[0]
-        salida.append({
-            "nombre": nombre, "marca": f0["marca"], "familia": f0["familia"],
-            "modelo": f0["modelo"], "variante": f0["variante"],
-            "evidencia_titulo": f0["evidencia_titulo"], "evidencia_url": f0["evidencia_url"],
-            "registros": [{"rid": f["rid"], "texto": f["texto"]} for f in filas],
-        })
+        f0 = c.execute(
+            "select marca, familia, modelo, variante, evidencia_titulo, evidencia_url from registros"
+            " where estado='PROPUESTO' and nombre=? and evidencia_titulo is not null limit 1", (nombre,)).fetchone() \
+            or c.execute("select marca, familia, modelo, variante, evidencia_titulo, evidencia_url from registros"
+                         " where estado='PROPUESTO' and nombre=? limit 1", (nombre,)).fetchone()
+        textos = [{"texto": f["texto"], "origen": f["origen"], "veces": f["n"], "categorias": f["cats"]}
+                  for f in c.execute(
+                      "select texto, origen, count(*) n, group_concat(distinct categoria) cats from registros"
+                      " where estado='PROPUESTO' and nombre=? group by texto, origen", (nombre,))]
+        salida.append({"nombre": nombre, **dict(f0), "textos": textos})
     salir_json(salida)
 
 
 def cmd_verificar(a):
     c = conectar()
-    resumen = {"APROBADO": 0, "REVISION_HUMANA": 0, "ignorados": []}
+    resumen = {"APROBADO": 0, "REVISION_HUMANA": 0, "sin_registros": []}
     for d in leer_json(a.archivo):
-        rids = d.get("rids") or ([d["rid"]] if d.get("rid") else [])
         decision = "APROBADO" if d.get("decision") == "APROBADO" else "REVISION_HUMANA"
         motivo = d.get("motivo") or ""
         if (decision == "APROBADO" and d.get("evidencia_titulo")
                 and not evidencia_existe(c, d["evidencia_titulo"])):
             decision = "REVISION_HUMANA"
             motivo = "La evidencia del verificador no aparece en los resultados reales de Google. " + motivo
+        rids = rids_de(c, d, "PROPUESTO")
+        if not rids:
+            resumen["sin_registros"].append(d.get("nombre") or d.get("rids"))
         for rid in rids:
-            fila = c.execute("select estado from registros where rid=?", (rid,)).fetchone()
-            if not fila or fila["estado"] != "PROPUESTO":
-                resumen["ignorados"].append(rid)
-                continue
-            c.execute("update registros set estado=?, motivo_verificador=?, actualizado=? where rid=?",
-                      (decision, motivo.strip(), time.time(), rid))
-            resumen[decision] += 1
+            cur = c.execute("update registros set estado=?, motivo_verificador=?, actualizado=?"
+                            " where rid=? and estado='PROPUESTO'", (decision, motivo.strip(), time.time(), rid))
+            resumen[decision] += cur.rowcount
     c.commit()
     salir_json(resumen)
 
@@ -343,19 +420,19 @@ def cmd_chrome(_a):
 def cmd_exportar(_a):
     c = conectar()
     SALIDA.mkdir(parents=True, exist_ok=True)
-    columnas = {
-        "aprobados.csv": ("select fm_id, rid, texto, nombre, marca, familia, modelo, variante"
-                          " from registros where estado='APROBADO' order by fm_id, rid"),
-        "revision_humana.csv": ("select fm_id, rid, texto, normalizada_actual, nombre as propuesta,"
-                                " nota, motivo_verificador from registros"
-                                " where estado='REVISION_HUMANA' order by grupo, rid"),
+    consultas = {
+        "aprobados.csv": ("select origen, sku, fm_id, texto, nombre, marca, familia, modelo, variante, categoria"
+                          " from registros where estado='APROBADO' order by sku, rid"),
+        "revision_humana.csv": ("select origen, sku, fm_id, texto, categoria, nombre as propuesta, nota,"
+                                " motivo_verificador from registros where estado='REVISION_HUMANA'"
+                                " order by grupo, sku"),
     }
-    for archivo, sql in columnas.items():
+    for archivo, sql in consultas.items():
         cur = c.execute(sql)
+        filas = cur.fetchall()
         with open(SALIDA / archivo, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow([d[0] for d in cur.description])
-            filas = cur.fetchall()
             w.writerows(filas)
         print(f"{SALIDA / archivo}: {len(filas)} filas")
 
@@ -363,11 +440,15 @@ def cmd_exportar(_a):
 def main():
     ap = argparse.ArgumentParser(description="Normalizador de impresoras")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("importar"); s.add_argument("archivo"); s.set_defaults(f=cmd_importar)
+    s = sub.add_parser("importar")
+    s.add_argument("--inventario", required=True)
+    s.add_argument("--normalizada", required=True)
+    s.add_argument("--compatibilidad", required=True)
+    s.set_defaults(f=cmd_importar)
     sub.add_parser("estado").set_defaults(f=cmd_estado)
     s = sub.add_parser("siguiente-lote")
     s.add_argument("--grupos", type=int, default=5)
-    s.add_argument("--max-registros", type=int, default=60)
+    s.add_argument("--max-textos", type=int, default=40)
     s.set_defaults(f=cmd_siguiente_lote)
     s = sub.add_parser("google"); s.add_argument("consulta"); s.set_defaults(f=cmd_google)
     sub.add_parser("chrome").set_defaults(f=cmd_chrome)

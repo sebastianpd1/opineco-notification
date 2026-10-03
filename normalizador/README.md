@@ -1,6 +1,6 @@
 # Normalizador de impresoras
 
-Recorre la tabla COMPATIBILITY de FileMaker y deja cada impresora con un nombre normalizado, con
+Recorre las compatibilidades de cada SKU en FileMaker y deja cada impresora con un nombre normalizado, con
 el flujo de dos "empleados" hecho con Claude Code en tu Mac (usa tu suscripción, no la API):
 
 ```
@@ -26,16 +26,24 @@ CSV de FileMaker → agrupar por marca + números → Agente 1 (criterio + Googl
 
 ## Exportar desde FileMaker
 
-En COMPATIBILITY: Archivo → Exportar registros → **Valores separados por comas (.csv)**, juego de
-caracteres **UTF-8**, con los campos en este orden: `ID`, `Brand`, `COMPATIBILITY`,
-`ImpresoraNormalizada`. Guárdalo como `datos/compatibility.csv` y:
+Tres exportaciones: Archivo → Exportar registros → **Valores separados por comas (.csv)**, juego de
+caracteres **UTF-8**, **todos los registros**, con los campos **en este orden exacto**:
+
+| Archivo | Tabla | Campos, en orden |
+|---|---|---|
+| `datos/inventario.csv` | INVENTARIO | `Item`, `NroParte`, `Marca`, `Categoria` |
+| `datos/normalizada.csv` | COMPATIBILIDADNORMALIZADA | `SKU`, `Marca`, `Impresora`, `Categoria` |
+| `datos/compatibility.csv` | COMPATIBILITY | `ID`, `InventoryItem`, `Brand`, `Printer` |
 
 ```
-python3 norma.py importar datos/compatibility.csv
+python3 norma.py importar --inventario datos/inventario.csv \
+  --normalizada datos/normalizada.csv --compatibilidad datos/compatibility.csv
 ```
 
-Si COMPATIBILITY trae varias impresoras en un mismo registro (separadas por salto de línea, coma o
-punto y coma), se separan solas y quedan como `ID#1`, `ID#2`...
+Regla: si un SKU tiene filas en la normalizada, se trabaja con esas; si no, con COMPATIBILITY. Para
+los de la normalizada, el agente ve además lo que decía COMPATIBILITY para ese SKU, y así detecta
+alucinaciones de la IA del año pasado. Si un campo trae varias impresoras (salto de línea, coma o
+punto y coma), se separan solas.
 
 ## Correr
 
@@ -46,8 +54,8 @@ siga solo: `/loop /lote`. Ver el avance: `python3 norma.py estado`.
 
 `python3 norma.py exportar` deja en `datos/salida/`:
 
-- `aprobados.csv` — `fm_id, rid, texto, nombre, marca, familia, modelo, variante` para importar a
-  FileMaker (por ID).
+- `aprobados.csv` — `origen, sku, fm_id, texto, nombre, marca, familia, modelo, variante, categoria`
+  para importar a FileMaker.
 - `revision_humana.csv` — lo que ningún agente pudo confirmar, con la nota del motivo.
 
 `datos/` no se sube a git (tiene la base de trabajo y el perfil de Chrome).

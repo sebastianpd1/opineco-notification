@@ -1,19 +1,27 @@
 # Normalizador de impresoras — instrucciones para Claude Code (agente 1)
 
-Opine Co vende tóner, polvo tóner y repuestos de impresoras. La tabla COMPATIBILITY de FileMaker tiene
-~30.000 nombres de impresoras pegados desde internet y catálogos de proveedores, escritos de mil
-formas (`P1102`, `p1102w`, `1102`, `LaserJet 1102`, `LJ1102`). El objetivo es dejar cada uno con un
-nombre normalizado y confiable, para que en la web un cliente busque su impresora y vea todo lo que
-le sirve.
+Opine Co vende tóner, polvo tóner y repuestos de impresoras. Cada SKU tiene su lista de impresoras
+compatibles, pegada desde internet y catálogos de proveedores y escrita de mil formas (`P1102`,
+`p1102w`, `1102`, `LaserJet 1102`, `LJ1102`). El objetivo es dejar cada una con un nombre normalizado
+y confiable, para que en la web un cliente busque su impresora y vea todo lo que le sirve.
+
+Hay dos fuentes por SKU (campo `origen`):
+- `NORMALIZADA`: la tabla COMPATIBILIDADNORMALIZADA, hecha con IA hace un año. Casi siempre bien,
+  pero **a veces alucinó**. Para estos textos tienes `en_compatibility_original`: lo que decía la
+  tabla original para esos mismos SKU con los mismos números. Si está vacío o no calza, sospecha.
+- `COMPATIBILITY`: el texto crudo, para los SKU que no tienen normalizada.
 
 Todo se hace con `python3 norma.py <comando>` (ver `README.md`). La base de trabajo es
 `datos/normalizador.db`; no la edites a mano.
 
 ## Cómo procesar un lote (lo dispara `/lote`)
 
-1. `python3 norma.py siguiente-lote --grupos 5` — grupos de registros que comparten marca + números.
-2. Dentro de cada grupo decide, registro por registro, a qué impresora real corresponde. Un grupo
-   puede mezclar impresoras distintas que comparten número: sepáralas.
+1. `python3 norma.py siguiente-lote --grupos 5` — grupos que comparten marca + números. Cada grupo
+   trae los **textos distintos** (con cuántas veces aparecen, SKU, categoría y nro. de parte de
+   ejemplo), no cada fila: una decisión sobre un texto cubre todas sus repeticiones.
+2. Dentro de cada grupo decide, texto por texto, a qué impresora real corresponde. Un grupo
+   puede mezclar impresoras distintas que comparten número: sepáralas. La categoría del SKU ayuda
+   (TINTAS vs TONER, POLVOS, PICKUP ROLLER...), y el nro. de parte es solo una pista, no una prueba.
 3. Si tienes cualquier duda, busca en Google: `python3 norma.py google "HP LaserJet 1102 impresora"`.
    Lee los títulos y elige con criterio. Una búsqueda sirve para todo el grupo; no busques lo obvio.
 4. Guarda las decisiones con `python3 norma.py proponer - <<'EOF' [...] EOF` (formato abajo).
@@ -25,10 +33,10 @@ Todo se hace con `python3 norma.py <comando>` (ver `README.md`). La base de trab
 - **La familia importa.** Números iguales en familias distintas son impresoras distintas:
   LaserJet vs Color LaserJet / LaserJet Pro Color, DeskJet vs Ink Tank / Smart Tank, OfficeJet,
   EcoTank vs Stylus, etc. Nunca juntes mono con color, ni cartucho con botella de tinta.
-- Si el texto no trae familia (`1102`, `P1102`), dedúcela de los otros registros del grupo, de
-  `normalizada_actual` o de Google. Si no es seguro, va a revisión humana.
-- `normalizada_actual` la generó una IA hace un año y **a veces alucinó**: úsala como pista, nunca
-  como verdad.
+- Si el texto no trae familia (`1102`, `P1102`), dedúcela de los otros textos del grupo, de
+  `en_compatibility_original` o de Google. Si no es seguro, va a revisión humana.
+- Un texto `NORMALIZADA` que no aparece en `en_compatibility_original` puede ser una alucinación:
+  confírmalo en Google o mándalo a revisión.
 - Quita prefijos/sufijos de ruido (`LJ`→LaserJet, "printer", "impresora", "series", mayúsculas,
   espacios), pero conserva los que distinguen familia.
 - **Variante:** si el texto trae variante (`w`, `dw`, `nw`, `dn`, `fdw`...) va en `variante` y en el
@@ -49,16 +57,18 @@ Todo se hace con `python3 norma.py <comando>` (ver `README.md`). La base de trab
 
 ## Formato para `proponer`
 
-Una decisión puede cubrir varios registros con `rids` (así una búsqueda resuelve sus coincidencias):
+Cada decisión nombra el `grupo` y los `textos` exactos (tal como vinieron) que cubre:
 
 ```json
 [
-  {"rids": ["1", "2", "3"], "estado": "OK", "marca": "HP", "familia": "LaserJet Pro",
-   "modelo": "P1102", "variante": "w", "nombre": "HP LaserJet Pro P1102w",
+  {"grupo": "HP|1102", "textos": ["P1102w", "p1102w", "HP LaserJet Pro P1102w"], "estado": "OK",
+   "marca": "HP", "familia": "LaserJet Pro", "modelo": "P1102", "variante": "w",
+   "nombre": "HP LaserJet Pro P1102w",
    "evidencia_titulo": "HP LaserJet Pro P1102w - Soporte HP", "evidencia_url": "https://...",
    "nota": "opcional"},
-  {"rid": "4#1", "estado": "REVISION", "nota": "Puede ser M251n o M251nw, Google no aclara"}
+  {"grupo": "HP|251", "textos": ["M251"], "estado": "REVISION",
+   "nota": "Puede ser M251n o M251nw, Google no aclara"}
 ]
 ```
 
-Si dos registros del grupo tienen variantes distintas (`P1102` y `P1102w`), son decisiones distintas.
+Textos con variantes distintas (`P1102` y `P1102w`) van en decisiones distintas.
