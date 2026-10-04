@@ -6,6 +6,7 @@ Comandos (todos con: python3 norma.py <comando> ...):
                                 Carga los 3 CSV de FileMaker (ver README). SKU con normalizada usan esa;
                                 el resto, COMPATIBILITY.
   estado                        Cuántos registros hay en cada estado.
+  tanda [--registros N]         Abre una tanda de N registros (el agente se detiene al completarla) o la muestra.
   siguiente-lote [--grupos N]   Próximos N grupos pendientes (marca + números) en JSON.
   google "<consulta>"           Busca en Google con Chrome (Playwright) y devuelve los 10 primeros resultados.
   chrome                        Abre el Chrome del normalizador para iniciar sesión en Google / aceptar cookies.
@@ -69,6 +70,9 @@ create table if not exists compat_crudo(sku text, texto text);
 create index if not exists ix_crudo on compat_crudo(sku);
 create table if not exists busquedas(consulta text primary key, resultados text, fecha real);
 create table if not exists meta(k text primary key, v text);
+-- Tandas: el agente solo trabaja dentro de una tanda abierta, con un tope de registros.
+create table if not exists tandas(id integer primary key, inicio real, limite integer);
+create table if not exists tanda_grupos(tanda integer, grupo text, registros integer);
 """
 
 
@@ -185,6 +189,33 @@ def cmd_importar(a):
     cmd_estado(a)
 
 
+def tanda_actual(c):
+    fila = c.execute("select v from meta where k='tanda_actual'").fetchone()
+    return c.execute("select * from tandas where id=?", (int(fila[0]),)).fetchone() if fila else None
+
+
+def cmd_tanda(a):
+    """Sin argumentos: muestra la tanda actual. Con --registros N: abre una tanda nueva de N registros."""
+    c = conectar()
+    if a.registros:
+        cur = c.execute("insert into tandas(inicio, limite) values(?,?)", (time.time(), a.registros))
+        c.execute("insert or replace into meta values('tanda_actual', ?)", (str(cur.lastrowid),))
+        c.commit()
+    t = tanda_actual(c)
+    if not t:
+        print("No hay tanda abierta. Abre una con: python3 norma.py tanda --registros 500")
+        return
+    asignados = c.execute("select coalesce(sum(registros), 0) from tanda_grupos where tanda=?",
+                          (t["id"],)).fetchone()[0]
+    estados = {f[0]: f[1] for f in c.execute(
+        "select estado, count(*) from registros where grupo in"
+        " (select grupo from tanda_grupos where tanda=?) group by estado", (t["id"],))}
+    busq = c.execute("select count(*) from busquedas where fecha >= ?", (t["inicio"],)).fetchone()[0]
+    salir_json({"tanda": t["id"], "limite_registros": t["limite"], "registros_tomados": asignados,
+                "estados_de_esos_registros": estados, "busquedas_google": busq,
+                "minutos": round((time.time() - t["inicio"]) / 60, 1)})
+
+
 def cmd_estado(_a):
     c = conectar()
     filas = c.execute("select estado, count(*) n from registros group by estado").fetchall()
@@ -199,9 +230,28 @@ def cmd_estado(_a):
 def cmd_siguiente_lote(a):
     """Cada grupo trae los textos distintos (no cada fila): así una decisión cubre todas sus repeticiones."""
     c = conectar()
-    grupos = [f[0] for f in c.execute(
-        "select grupo from registros where estado='PENDIENTE' group by grupo order by grupo limit ?",
-        (a.grupos,))]
+    tanda = tanda_actual(c)
+    if not tanda:
+        salir_json({"tanda_completa": True, "mensaje": "No hay tanda abierta. Detente: el usuario abre una "
+                    "con 'python3 norma.py tanda --registros 500'."})
+        return
+    usados = c.execute("select coalesce(sum(registros), 0) from tanda_grupos where tanda=?",
+                       (tanda["id"],)).fetchone()[0]
+    grupos = []
+    for f in c.execute(
+            "select grupo, count(*) n from registros where estado='PENDIENTE'"
+            " and grupo not in (select grupo from tanda_grupos where tanda=?)"
+            " group by grupo order by grupo", (tanda["id"],)):
+        if len(grupos) >= a.grupos or (usados + f["n"] > tanda["limite"] and (grupos or usados)):
+            break
+        grupos.append(f["grupo"])
+        usados += f["n"]
+        c.execute("insert into tanda_grupos values(?,?,?)", (tanda["id"], f["grupo"], f["n"]))
+    c.commit()
+    if not grupos:
+        salir_json({"tanda_completa": True, "mensaje": "Tanda completa. Termina de verificar lo propuesto y "
+                    "detente; el usuario revisa el consumo y abre otra tanda."})
+        return
     lote = []
     for g in grupos:
         textos = []
@@ -478,6 +528,7 @@ def main():
     s.add_argument("--compatibilidad", required=True)
     s.set_defaults(f=cmd_importar)
     sub.add_parser("estado").set_defaults(f=cmd_estado)
+    s = sub.add_parser("tanda"); s.add_argument("--registros", type=int); s.set_defaults(f=cmd_tanda)
     s = sub.add_parser("siguiente-lote")
     s.add_argument("--grupos", type=int, default=5)
     s.add_argument("--max-textos", type=int, default=40)

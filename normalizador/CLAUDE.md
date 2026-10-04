@@ -28,6 +28,10 @@ Todo se hace con `python3 norma.py <comando>` (ver `README.md`). La base de trab
 5. Pide al subagente `verificador` que revise lo propuesto.
 6. Responde con una línea de resumen (cuántos propuestos, cuántos a revisión humana).
 
+El trabajo va por **tandas** que abre el usuario (`python3 norma.py tanda --registros 500`). Si
+`siguiente-lote` responde `"tanda_completa": true`, termina la verificación pendiente y detente.
+Nunca abras una tanda tú.
+
 ## Criterio (lo que un vendedor con 16 años en el rubro sabe)
 
 - **La familia importa.** Números iguales en familias distintas son impresoras distintas:

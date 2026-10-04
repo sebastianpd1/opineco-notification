@@ -48,8 +48,15 @@ punto y coma), se separan solas.
 
 ## Correr
 
-Abre Claude Code en esta carpeta (`claude`) y escribe `/lote` para un lote de 5 grupos. Para que
-siga solo: `/loop /lote`. Ver el avance: `python3 norma.py estado`.
+Se trabaja por **tandas** para controlar el consumo del plan:
+
+1. En la Terminal: `python3 norma.py tanda --registros 500` (abre una tanda de 500 registros).
+2. Abre Claude Code en esta carpeta (`claude`), escribe `/usage` y anota el porcentaje usado.
+3. Escribe `/loop /lote`. Procesa lotes hasta completar los 500 registros y se detiene solo.
+4. Escribe `/usage` de nuevo: la diferencia es lo que costó la tanda. `python3 norma.py tanda`
+   muestra cuántos registros se aprobaron, cuántos fueron a revisión, búsquedas y minutos.
+
+Sin tanda abierta el agente no procesa nada. Avance general: `python3 norma.py estado`.
 
 ## Resultado
 
