@@ -80,17 +80,20 @@ FAMILIAS_MARCA = [
 
 
 def marca_impresora(texto, marca_item):
+    """Devuelve (marca, fuente): fuente 'texto' si el nombre de la impresora la delata; 'producto' si
+    se tomó la marca del SKU a falta de otra pista (puede estar mal: hay muchas marcas cruzadas)."""
     t = (texto or "").upper()
     for patron, marca in NOMBRES_MARCA + FAMILIAS_MARCA:
         if re.search(patron, t):
-            return marca
-    return (marca_item or "").strip().upper()
+            return marca, "texto"
+    return (marca_item or "").strip().upper(), "producto"
 
 ESQUEMA = """
 create table if not exists registros(
   rid text primary key,            -- N:<sku>:<n> (normalizada) o C:<ID>[#n] (COMPATIBILITY)
   origen text,                     -- NORMALIZADA o COMPATIBILITY
-  sku text, fm_id text, marca_item text, marca_fm text, nro_parte text, categoria text, texto text,
+  sku text, fm_id text, marca_item text, marca_fm text, marca_fuente text, nro_parte text,
+  categoria text, texto text,
   grupo text,                      -- MARCA|números, la búsqueda "solo números" del flujo
   estado text default 'PENDIENTE', -- PENDIENTE, PROPUESTO, APROBADO, REVISION_HUMANA
   marca text, familia text, modelo text, variante text, nombre text,
@@ -237,11 +240,11 @@ def cmd_importar(a):
     def insertar(rid, origen, sku, fm_id, marca_item, categoria, texto):
         inv = inventario.get(sku, {})
         marca_item = marca_item or inv.get("marca", "")
-        marca = marca_impresora(texto, marca_item)
+        marca, fuente = marca_impresora(texto, marca_item)
         cur = c.execute(
-            "insert or ignore into registros(rid, origen, sku, fm_id, marca_item, marca_fm, nro_parte, categoria,"
-            " texto, grupo) values(?,?,?,?,?,?,?,?,?,?)",
-            (rid, origen, sku, fm_id, marca_item, marca, inv.get("nro_parte", ""),
+            "insert or ignore into registros(rid, origen, sku, fm_id, marca_item, marca_fm, marca_fuente, nro_parte,"
+            " categoria, texto, grupo) values(?,?,?,?,?,?,?,?,?,?,?)",
+            (rid, origen, sku, fm_id, marca_item, marca, fuente, inv.get("nro_parte", ""),
              categoria or inv.get("categoria", ""), texto, clave_grupo(marca, texto)))
         return cur.rowcount
 
@@ -342,14 +345,15 @@ def cmd_siguiente_lote(a):
         for f in c.execute(
                 "select texto, origen, count(*) n, group_concat(distinct sku) skus,"
                 " group_concat(distinct categoria) cats, group_concat(distinct nro_parte) partes,"
-                " group_concat(distinct marca_item) marcas_item"
+                " group_concat(distinct marca_item) marcas_item, group_concat(distinct marca_fuente) fuentes"
                 " from registros where grupo=? and estado='PENDIENTE'"
                 " group by texto, origen order by n desc limit ?", (g, a.max_textos)):
             item = {"texto": f["texto"], "origen": f["origen"], "veces": f["n"],
                     "skus": (f["skus"] or "").split(",")[:5],
                     "categorias": (f["cats"] or "").split(",")[:5],
                     "nros_parte": [p for p in (f["partes"] or "").split(",") if p][:5],
-                    "marca_del_producto": (f["marcas_item"] or "").split(",")[:3]}
+                    "marca_del_producto": (f["marcas_item"] or "").split(",")[:3],
+                    "marca_del_grupo_segun": f["fuentes"]}
             if f["origen"] == "NORMALIZADA":
                 # Lo que decía COMPATIBILITY para esos mismos SKU con los mismos números: contraste anti-alucinación.
                 crudos = {r[0] for r in c.execute(

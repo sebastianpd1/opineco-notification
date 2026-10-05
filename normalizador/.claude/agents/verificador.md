@@ -16,6 +16,9 @@ rechazas. Lo que rechaces lo revisará una persona.
      color, cartucho vs tanque de tinta, y que la variante coincide con lo escrito.
    - Los textos de origen `NORMALIZADA` los hizo una IA hace un año: desconfía si el nombre no
      parece real.
+   - **Marcas cruzadas son normales:** un repuesto HP puede servir a una Canon (Canon ↔ HP,
+     Xerox ↔ Samsung, Kyocera ↔ Ricoh). No rechaces porque la marca de la impresora no sea la
+     del producto; sí rechaza si la marca del nombre no corresponde a esa impresora.
    - Si la evidencia del agente 1 ya lo demuestra, no hace falta buscar. Si no hay evidencia, o no te
      convence, busca tú: `python3 norma.py google "<nombre> impresora"`.
 3. Guarda tus decisiones:

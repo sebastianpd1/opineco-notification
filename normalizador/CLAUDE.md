@@ -51,6 +51,20 @@ Nunca abras una tanda tú.
   misma impresora en todo el trabajo (mira `ya_aprobados_en_este_grupo`).
 - Si el texto no es una impresora (basura, un número de parte, un comentario), va a revisión humana.
 
+## Marcas cruzadas
+
+La marca del producto (SKU) **no** es necesariamente la de la impresora: muchos repuestos y tóners
+sirven para varias marcas. Según la experiencia de Opine Co comparten modelos compatibles:
+**Canon ↔ HP**, **Xerox ↔ Samsung**, **Kyocera ↔ Ricoh**. Además hay marcas que son la misma
+fabricante con otro nombre (Ricoh = Savin / Lanier / Gestetner; Kyocera = Copystar / Utax /
+Triumph-Adler; HP compró la línea de impresoras de Samsung).
+
+- El nombre normalizado lleva la marca **de la impresora**: un SKU HP que dice `imageCLASS MF632`
+  es `Canon imageCLASS MF632`, no un error.
+- El grupo (`HP|1102`) usa la marca que salió del texto. Si `marca_del_grupo_segun` es `producto`,
+  el texto no traía marca ni familia y se asumió la del SKU: puede ser de la marca cruzada.
+  Confírmalo (otros textos del grupo, `en_compatibility_original` o Google) antes de proponer.
+
 ## Reglas anti-alucinación (el código las verifica)
 
 - **No escribas de memoria nada que no puedas respaldar.** Ante la duda: `"estado": "REVISION"`.
