@@ -49,14 +49,48 @@ SALIDA = DATOS / "salida"
 # Pausa entre búsquedas en Google (segundos) para no gatillar el captcha.
 PAUSA_MIN, PAUSA_MAX = 12, 25
 
-# FileMaker exporta los saltos de línea dentro de un campo como tabulador vertical (\x0b).
-SEPARADORES = re.compile(r"[\x0b\n\r;,|]+")
+# Separadores de varias impresoras dentro de un mismo campo: saltos de línea (FileMaker los exporta
+# como \x0b), ; , | tabulador y "/" entre modelos (P3005/M3027MFP). El doble espacio se trata aparte.
+SEPARADORES = re.compile(r"[\x0b\n\r;,|\t]+|(?<=\w)/(?=\w)")
+
+MARCAS = ["HP", "CANON", "EPSON", "BROTHER", "SAMSUNG", "XEROX", "LEXMARK", "KYOCERA", "RICOH",
+          "TOSHIBA", "KONICA MINOLTA", "SHARP", "OKI", "PANTUM", "DELL", "PANASONIC", "SAVIN", "LANIER"]
+# La marca del SKU no siempre es la de la impresora (un repuesto "HP" sirve para Canon imageCLASS):
+# se toma del texto de la impresora. Primero el nombre de la marca escrito, luego la familia.
+NOMBRES_MARCA = [(r"\bHP\b|HEWLETT", "HP"), (r"CANON", "CANON"), (r"EPSON", "EPSON"), (r"BROTHER", "BROTHER"),
+                 (r"SAMSUNG", "SAMSUNG"), (r"XEROX", "XEROX"), (r"LEXMARK", "LEXMARK"), (r"KYOCERA", "KYOCERA"),
+                 (r"RICOH", "RICOH"), (r"TOSHIBA", "TOSHIBA"), (r"KONICA|MINOLTA", "KONICA MINOLTA"),
+                 (r"SHARP", "SHARP"), (r"\bOKI", "OKI"), (r"PANTUM", "PANTUM"), (r"\bDELL\b", "DELL"),
+                 (r"PANASONIC", "PANASONIC")]
+FAMILIAS_MARCA = [
+    (r"LASER ?JET|DESK ?JET|OFFICE ?JET|INK ?TANK|SMART ?TANK|NEVERSTOP|SCAN ?JET|\bENVY\b|PAGE ?WIDE"
+     r"|PHOTOSMART|DESIGN ?JET", "HP"),
+    (r"IMAGE ?CLASS|I-?SENSYS|IMAGE ?RUNNER|PIXMA|MAXIFY|\bLBP ?\d", "CANON"),
+    (r"WORK ?FORCE|ECO ?TANK|STYLUS|\bXP-\d|\bWF-\d|\bET-\d", "EPSON"),
+    (r"\bHL-|\bDCP-|\bMFC-", "BROTHER"),
+    (r"\bML-?\d|\bSCX-?\d|\bCLX-?\d|\bCLP-?\d|XPRESS|\bSL-", "SAMSUNG"),
+    (r"WORK ?CENTRE|PHASER|VERSALINK|ALTALINK|DOCU ?CENTRE", "XEROX"),
+    (r"ECOSYS|TASK ?ALFA|\bFS-\d", "KYOCERA"),
+    (r"AFICIO", "RICOH"),
+    (r"E-?STUDIO", "TOSHIBA"),
+    (r"BIZHUB", "KONICA MINOLTA"),
+    (r"\bMX-\d|\bAR-\d", "SHARP"),
+    (r"\b(MX|MS|CX|CS|XS|XM|XC|MB|MC)\d{3}", "LEXMARK"),
+]
+
+
+def marca_impresora(texto, marca_item):
+    t = (texto or "").upper()
+    for patron, marca in NOMBRES_MARCA + FAMILIAS_MARCA:
+        if re.search(patron, t):
+            return marca
+    return (marca_item or "").strip().upper()
 
 ESQUEMA = """
 create table if not exists registros(
   rid text primary key,            -- N:<sku>:<n> (normalizada) o C:<ID>[#n] (COMPATIBILITY)
   origen text,                     -- NORMALIZADA o COMPATIBILITY
-  sku text, fm_id text, marca_fm text, nro_parte text, categoria text, texto text,
+  sku text, fm_id text, marca_item text, marca_fm text, nro_parte text, categoria text, texto text,
   grupo text,                      -- MARCA|números, la búsqueda "solo números" del flujo
   estado text default 'PENDIENTE', -- PENDIENTE, PROPUESTO, APROBADO, REVISION_HUMANA
   marca text, familia text, modelo text, variante text, nombre text,
@@ -124,8 +158,24 @@ def celda(fila, i):
     return fila[i].strip() if len(fila) > i else ""
 
 
+def limpiar(texto):
+    """Espacios y saltos de línea repetidos → uno; sin espacios, guiones ni puntos sueltos en los bordes."""
+    return re.sub(r"\s+", " ", texto or "").strip(" -–.:")
+
+
 def piezas(texto):
-    return [p.strip() for p in SEPARADORES.split(texto or "") if p.strip()]
+    """Separa las impresoras de un campo y limpia cada una. Dos o más espacios separan solo si
+    ambos lados tienen un número de modelo ("SL K7400  E87650" sí; "HP  LaserJet P1102" no)."""
+    salida = []
+    for trozo in SEPARADORES.split(texto or ""):
+        partes = []
+        for parte in re.split(r" {2,}", trozo.strip()):
+            if partes and not (re.search(r"\d", parte) and re.search(r"\d", partes[-1])):
+                partes[-1] += " " + parte
+            else:
+                partes.append(parte)
+        salida += [limpiar(x) for x in partes]
+    return [x for x in salida if x]
 
 
 def leer_json(origen):
@@ -140,39 +190,69 @@ def salir_json(obj):
 
 # ---------------------------------------------------------------- importar / estado
 
+PATRON_SKU = re.compile(r"^[A-Za-z]{1,3}-\S")
+
+
+def detectar_columnas_normalizada(filas):
+    """FileMaker no exporta encabezados y el orden de campos puede variar: se detecta por el contenido.
+    SKU = parece código (T-..., A-...); Marca = valores de marcas; Impresora = la más variada; resto = Categoria."""
+    muestra = [f for f in filas[:3000] if len(f) >= 4]
+    n = max(len(muestra), 1)
+    cols = range(4)
+    def razon(i, ok):
+        return sum(1 for f in muestra if ok(f[i].strip())) / n
+    sku = max(cols, key=lambda i: razon(i, lambda v: bool(PATRON_SKU.match(v))))
+    resto = [i for i in cols if i != sku]
+    marca = max(resto, key=lambda i: razon(i, lambda v: v.upper() in MARCAS))
+    resto = [i for i in resto if i != marca]
+    impresora = max(resto, key=lambda i: len({f[i].strip().upper() for f in muestra}))
+    categoria = [i for i in resto if i != impresora][0]
+    return {"sku": sku, "marca": marca, "impresora": impresora, "categoria": categoria}
+
+
 def cmd_importar(a):
     """Inventario: Item, NroParte, Marca, Categoria.
-    Normalizada: SKU, Marca, Impresora, Categoria.
+    Normalizada: SKU, Marca, Impresora, Categoria (el orden se detecta solo).
     Compatibility: ID, InventoryItem, Brand, Printer.
     Los SKU con filas en la normalizada se trabajan con ella; el resto con COMPATIBILITY."""
     c = conectar()
+    if c.execute("select count(*) from registros").fetchone()[0]:
+        if not a.reiniciar:
+            sys.exit("Ya hay datos importados. Para borrarlos y cargar de nuevo: agrega --reiniciar "
+                     "(se pierde el avance de normalización; las búsquedas de Google guardadas se conservan).")
+        c.executescript("drop table registros; drop table compat_crudo; drop table tandas;"
+                        " drop table tanda_grupos; delete from meta where k='tanda_actual';")
+        c.executescript(ESQUEMA)
+
     inventario = {}
     for f in leer_csv(a.inventario):
         inventario[celda(f, 0)] = {"nro_parte": celda(f, 1), "marca": celda(f, 2), "categoria": celda(f, 3)}
 
-    normalizada = [f for f in leer_csv(a.normalizada) if celda(f, 0) and celda(f, 2)]
-    skus_normalizados = {celda(f, 0) for f in normalizada}
+    filas_norm = leer_csv(a.normalizada)
+    col = detectar_columnas_normalizada(filas_norm)
+    normalizada = [f for f in filas_norm if celda(f, col["sku"]) and celda(f, col["impresora"])]
+    skus_normalizados = {celda(f, col["sku"]) for f in normalizada}
     compat = [f for f in leer_csv(a.compatibilidad) if celda(f, 1) and celda(f, 3)]
 
-    def insertar(rid, origen, sku, fm_id, marca, categoria, texto):
+    def insertar(rid, origen, sku, fm_id, marca_item, categoria, texto):
         inv = inventario.get(sku, {})
-        marca = marca or inv.get("marca", "")
+        marca_item = marca_item or inv.get("marca", "")
+        marca = marca_impresora(texto, marca_item)
         cur = c.execute(
-            "insert or ignore into registros(rid, origen, sku, fm_id, marca_fm, nro_parte, categoria, texto, grupo)"
-            " values(?,?,?,?,?,?,?,?,?)",
-            (rid, origen, sku, fm_id, marca, inv.get("nro_parte", ""),
+            "insert or ignore into registros(rid, origen, sku, fm_id, marca_item, marca_fm, nro_parte, categoria,"
+            " texto, grupo) values(?,?,?,?,?,?,?,?,?,?)",
+            (rid, origen, sku, fm_id, marca_item, marca, inv.get("nro_parte", ""),
              categoria or inv.get("categoria", ""), texto, clave_grupo(marca, texto)))
         return cur.rowcount
 
     nuevos = {"NORMALIZADA": 0, "COMPATIBILITY": 0}
     vistos = {}
     for f in normalizada:
-        sku = celda(f, 0)
-        for texto in piezas(celda(f, 2)):
+        sku = celda(f, col["sku"])
+        for texto in piezas(celda(f, col["impresora"])):
             vistos[sku] = vistos.get(sku, 0) + 1
             nuevos["NORMALIZADA"] += insertar(f"N:{sku}:{vistos[sku]}", "NORMALIZADA", sku, "",
-                                              celda(f, 1), celda(f, 3), texto)
-    c.execute("delete from compat_crudo")
+                                              celda(f, col["marca"]), celda(f, col["categoria"]), texto)
     for f in compat:
         fm_id, sku = celda(f, 0), celda(f, 1)
         partes = piezas(celda(f, 3))
@@ -183,9 +263,13 @@ def cmd_importar(a):
             rid = f"C:{fm_id}" if len(partes) == 1 else f"C:{fm_id}#{i}"
             nuevos["COMPATIBILITY"] += insertar(rid, "COMPATIBILITY", sku, fm_id, celda(f, 2), "", texto)
     c.commit()
-    sin_inv = len(({celda(f, 0) for f in normalizada} | {celda(f, 1) for f in compat}) - set(inventario))
-    salir_json({"registros_nuevos": nuevos, "skus_con_normalizada": len(skus_normalizados),
-                "skus_sin_ficha_en_inventario": sin_inv})
+    skus = {celda(f, col["sku"]) for f in normalizada} | {celda(f, 1) for f in compat}
+    nombres = ["SKU", "Marca", "Impresora", "Categoria"]
+    orden = [n for _, n in sorted((col[k.lower()], k) for k in nombres)]
+    salir_json({"columnas_normalizada_detectadas": orden,
+                "registros_nuevos": nuevos, "skus_con_normalizada": len(skus_normalizados),
+                "skus_solo_compatibility": len({celda(f, 1) for f in compat} - skus_normalizados),
+                "skus_sin_ficha_en_inventario": len(skus - set(inventario))})
     cmd_estado(a)
 
 
@@ -257,13 +341,15 @@ def cmd_siguiente_lote(a):
         textos = []
         for f in c.execute(
                 "select texto, origen, count(*) n, group_concat(distinct sku) skus,"
-                " group_concat(distinct categoria) cats, group_concat(distinct nro_parte) partes"
+                " group_concat(distinct categoria) cats, group_concat(distinct nro_parte) partes,"
+                " group_concat(distinct marca_item) marcas_item"
                 " from registros where grupo=? and estado='PENDIENTE'"
                 " group by texto, origen order by n desc limit ?", (g, a.max_textos)):
             item = {"texto": f["texto"], "origen": f["origen"], "veces": f["n"],
                     "skus": (f["skus"] or "").split(",")[:5],
                     "categorias": (f["cats"] or "").split(",")[:5],
-                    "nros_parte": [p for p in (f["partes"] or "").split(",") if p][:5]}
+                    "nros_parte": [p for p in (f["partes"] or "").split(",") if p][:5],
+                    "marca_del_producto": (f["marcas_item"] or "").split(",")[:3]}
             if f["origen"] == "NORMALIZADA":
                 # Lo que decía COMPATIBILITY para esos mismos SKU con los mismos números: contraste anti-alucinación.
                 crudos = {r[0] for r in c.execute(
@@ -526,6 +612,7 @@ def main():
     s.add_argument("--inventario", required=True)
     s.add_argument("--normalizada", required=True)
     s.add_argument("--compatibilidad", required=True)
+    s.add_argument("--reiniciar", action="store_true", help="borra lo importado antes de cargar")
     s.set_defaults(f=cmd_importar)
     sub.add_parser("estado").set_defaults(f=cmd_estado)
     s = sub.add_parser("tanda"); s.add_argument("--registros", type=int); s.set_defaults(f=cmd_tanda)
