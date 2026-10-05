@@ -11,7 +11,8 @@ rechazas. Lo que rechaces lo revisará una persona.
 1. `python3 norma.py lote-verificar` — propuestas pendientes, agrupadas por nombre, con los textos
    originales (y su origen y categoría) y la evidencia que dejó el agente 1.
 2. Para cada nombre, comprueba:
-   - Que la impresora **existe** con ese nombre exacto (marca, familia, modelo, variante).
+   - Que la impresora **existe** con ese nombre exacto (marca, familia, modelo, variante). El nombre
+     va **sin la marca** (`LaserJet Pro P1102w`, marca `HP` aparte): no lo rechaces por eso.
    - Que **todos** los textos de la lista corresponden a esa impresora: misma familia, mono vs
      color, cartucho vs tanque de tinta, y que la variante coincide con lo escrito.
    - Los textos de origen `NORMALIZADA` los hizo una IA hace un año: desconfía si el nombre no
@@ -26,10 +27,10 @@ rechazas. Lo que rechaces lo revisará una persona.
 ```
 python3 norma.py verificar - <<'EOF'
 [
-  {"nombre": "HP LaserJet Pro P1102w", "decision": "APROBADO",
+  {"nombre": "LaserJet Pro P1102w", "decision": "APROBADO",
    "motivo": "Existe; título de soporte HP lo confirma",
    "evidencia_titulo": "título tal cual aparece en Google (solo si buscaste)"},
-  {"nombre": "HP LaserJet Pro M251nw", "textos": ["Color LaserJet M251"], "decision": "RECHAZADO",
+  {"nombre": "LaserJet Pro M251nw", "textos": ["Color LaserJet M251"], "decision": "RECHAZADO",
    "motivo": "Ese texto dice Color y el nombre es otro modelo"}
 ]
 EOF

@@ -46,9 +46,11 @@ Nunca abras una tanda tú.
 - **Variante:** si el texto trae variante (`w`, `dw`, `nw`, `dn`, `fdw`...) va en `variante` y en el
   nombre. Si no la trae, deja `variante` vacía y el nombre sin variante; no la inventes.
 - `modelo` es el modelo base sin variante (`P1102`, `M251`, `2130`, `315`).
-- Formato del nombre: `Marca Familia Modelo+variante`, como lo escribe el fabricante
-  (`HP LaserJet Pro P1102w`, `HP DeskJet 2130`, `Brother HL-L2350DW`). Mantén el mismo nombre para la
-  misma impresora en todo el trabajo (mira `ya_aprobados_en_este_grupo`).
+- Formato del nombre: `Familia Modelo+variante`, **sin la marca**, como lo escribe el fabricante
+  (`LaserJet Pro P1102w`, `DeskJet 2130`, `HL-L2350DW`, `DCP-J100`). La marca va solo en el campo
+  `marca`: en la web la marca es la categoría y dentro se listan los modelos, así que repetirla en el
+  nombre sobra. Mantén el mismo nombre para la misma impresora en todo el trabajo (mira
+  `ya_aprobados_en_este_grupo`).
 - Si el texto no es una impresora (basura, un número de parte, un comentario), va a revisión humana.
 
 ## Marcas cruzadas
@@ -59,8 +61,8 @@ sirven para varias marcas. Según la experiencia de Opine Co comparten modelos c
 fabricante con otro nombre (Ricoh = Savin / Lanier / Gestetner; Kyocera = Copystar / Utax /
 Triumph-Adler; HP compró la línea de impresoras de Samsung).
 
-- El nombre normalizado lleva la marca **de la impresora**: un SKU HP que dice `imageCLASS MF632`
-  es `Canon imageCLASS MF632`, no un error.
+- La `marca` es la **de la impresora**: un SKU HP que dice `imageCLASS MF632` va con
+  `"marca": "Canon"` y `"nombre": "imageCLASS MF632"`, no es un error.
 - El grupo (`HP|1102`) usa la marca que salió del texto. Si `marca_del_grupo_segun` es `producto`,
   el texto no traía marca ni familia y se asumió la del SKU: puede ser de la marca cruzada.
   Confírmalo (otros textos del grupo, `en_compatibility_original` o Google) antes de proponer.
@@ -81,7 +83,7 @@ Cada decisión nombra el `grupo` y los `textos` exactos (tal como vinieron) que 
 [
   {"grupo": "HP|1102", "textos": ["P1102w", "p1102w", "HP LaserJet Pro P1102w"], "estado": "OK",
    "marca": "HP", "familia": "LaserJet Pro", "modelo": "P1102", "variante": "w",
-   "nombre": "HP LaserJet Pro P1102w",
+   "nombre": "LaserJet Pro P1102w",
    "evidencia_titulo": "HP LaserJet Pro P1102w - Soporte HP", "evidencia_url": "https://...",
    "nota": "opcional"},
   {"grupo": "HP|251", "textos": ["M251"], "estado": "REVISION",

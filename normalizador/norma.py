@@ -116,7 +116,20 @@ def conectar():
     c = sqlite3.connect(DB)
     c.row_factory = sqlite3.Row
     c.executescript(ESQUEMA)
+    # En la web la marca es la categoría y dentro van los modelos: el nombre nunca repite la marca.
+    # (Corrige también nombres guardados antes de esta regla.)
+    c.execute("update registros set nombre = trim(substr(nombre, length(marca) + 1))"
+              " where marca is not null and marca != '' and upper(nombre) like upper(marca) || ' %'")
+    c.commit()
     return c
+
+
+def sin_marca(nombre, marca):
+    """'Brother DCP-J100' → 'DCP-J100'. El nombre normalizado no lleva la marca (va en su propio campo)."""
+    nombre = limpiar(nombre)
+    if marca and nombre.upper().startswith(marca.strip().upper() + " "):
+        nombre = nombre[len(marca.strip()):].strip()
+    return nombre
 
 
 def plano(s):
@@ -191,7 +204,10 @@ def salir_json(obj):
 
 # ---------------------------------------------------------------- importar / estado
 
-PATRON_SKU = re.compile(r"^[A-Za-z]{1,3}-\S")
+# Prefijos de SKU de Opine Co (los de la fórmula COMPATIBILITY::Category en FileMaker): T- tóner, D- drum,
+# C- chip, FX- fixing film, UR- residuos, WR- cleaning web, etc. Un nombre de impresora como HL-1110 o
+# DCP-J100 no calza, porque HL- y DCP- no son prefijos de SKU.
+PATRON_SKU = re.compile(r"^(FX|UR|WR|[A-Z])-\S", re.IGNORECASE)
 
 
 def detectar_columnas_normalizada(filas):
@@ -403,6 +419,8 @@ def cmd_proponer(a):
         if not rids:
             resumen["sin_registros"].append(d.get("textos") or d.get("rids") or d.get("rid"))
             continue
+        if d.get("nombre"):
+            d["nombre"] = sin_marca(d["nombre"], d.get("marca"))
         for rid in rids:
             fila = c.execute("select texto, estado from registros where rid=?", (rid,)).fetchone()
             if not fila or fila["estado"] != "PENDIENTE":
