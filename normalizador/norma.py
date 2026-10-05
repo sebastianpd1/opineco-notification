@@ -29,10 +29,8 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote_plus
 
-try:
-    from playwright.sync_api import Error as PlaywrightError
-except ImportError:  # sin Playwright igual funcionan importar/lotes/exportar
-    PlaywrightError = Exception
+# Playwright se carga solo al usar Google (comandos google/chrome); el resto funciona sin él.
+PlaywrightError = Exception
 
 BASE = Path(__file__).resolve().parent
 
@@ -497,6 +495,8 @@ JS_RESULTADOS = """() => {
 
 
 def abrir_chrome(p):
+    global PlaywrightError
+    from playwright.sync_api import Error as PlaywrightError
     PERFIL_CHROME.mkdir(parents=True, exist_ok=True)
     ctx = p.chromium.launch_persistent_context(
         str(PERFIL_CHROME), channel="chrome", headless=False,
