@@ -27,10 +27,15 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
 - **Buscar y verificar en Google:** busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
   encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.
 - **Teclado:** ↑ ↓ eligen una variación del grupo; **→** la completa tal cual (como "Solo esta" +
-  "Normalizar como este") y pasa a la siguiente. No actúa mientras escribes en un campo.
-- Al normalizar, la burbuja de abajo trae **Deshacer** unos segundos, y se pasa solo a lo siguiente:
-  la próxima variación del grupo o, si el grupo quedó vacío, el siguiente modelo de la lista.
-- **Deshacer** revierte la última acción. **Exportar CSV** deja `datos/salida/normalizados_web.csv`.
+  "Normalizar como este") y pasa a la siguiente. No actúa mientras escribes en un campo. Una
+  pulsación = una acción: si dejas la tecla apretada no se repite.
+- Al normalizar, la burbuja de abajo dice exactamente qué se hizo (`“J4510” completado tal cual` o
+  `“a”, “b” → normalizado como “X”`) y trae **Deshacer** unos segundos, que revierte **esa** acción.
+  Luego se pasa solo a lo siguiente: la próxima variación del grupo o, si el grupo quedó vacío, el
+  siguiente modelo de la lista.
+- **Deshacer** (arriba) revierte la última acción. En **Completados**, el botón **Reabrir** (primera
+  columna) devuelve a pendientes solo esa impresora. **Exportar CSV** deja
+  `datos/salida/normalizados_web.csv`.
 
 ### Conectado a FileMaker (recomendado)
 

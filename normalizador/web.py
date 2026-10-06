@@ -208,27 +208,40 @@ def normalizar(c, clave, llaves, nombre, como):
     if "," in nombre:
         raise ValueError("Deja un solo nombre (sin comas) antes de normalizar.")
     accion = nueva_accion(c, "normalizar", {"clave": clave, "nombre": nombre})
-    n = 0
+    n, textos = 0, set()
     for r in c.execute("select id, texto from filas where clave=? and estado='PENDIENTE'", (clave,)).fetchall():
         if igual(r["texto"]) in llaves:
             n += c.execute("update filas set estado='COMPLETADO', nombre=?, como=?, accion=? where id=?",
                            (nombre, como, accion, r["id"])).rowcount
+            textos.add(r["texto"])
     c.execute("update acciones set detalle=? where id=?",
               (json.dumps({"clave": clave, "nombre": nombre, "registros": n}, ensure_ascii=False), accion))
     c.commit()
-    return {"registros": n, "nombre": nombre}
+    # tal_cual: se completó con su mismo texto (no se cambió el nombre)
+    return {"registros": n, "nombre": nombre, "accion": accion, "tal_cual": textos == {nombre},
+            "textos": sorted(textos)}
 
 
-def reabrir(c, clave):
-    """Devuelve a pendientes todo lo completado de ese grupo, para corregirlo."""
-    n = c.execute("update filas set estado='PENDIENTE', nombre=null, como=null, accion=null"
-                  " where clave=? and estado='COMPLETADO'", (clave,)).rowcount
+def reabrir(c, clave, texto=None):
+    """Devuelve a pendientes lo completado de esa impresora (clave + texto); sin texto, todo el grupo."""
+    sql, args = "update filas set estado='PENDIENTE', nombre=null, como=null, accion=null" \
+                " where clave=? and estado='COMPLETADO'", [clave]
+    if texto is not None:
+        sql += " and texto=?"
+        args.append(texto)
+    n = c.execute(sql, args).rowcount
     c.commit()
     return {"mensaje": f"{n} registros vuelven a pendientes", "registros": n}
 
 
-def deshacer(c):
-    ultima = c.execute("select id, tipo, detalle from acciones order by id desc limit 1").fetchone()
+def deshacer(c, accion=None):
+    """Deshace una acción concreta (la de la burbuja) o, sin indicarla, la última."""
+    if accion:
+        ultima = c.execute("select id, tipo, detalle from acciones where id=?", (accion,)).fetchone()
+        if not ultima:
+            return {"mensaje": "Esa acción ya se había deshecho."}
+    else:
+        ultima = c.execute("select id, tipo, detalle from acciones order by id desc limit 1").fetchone()
     if not ultima:
         return {"mensaje": "No hay nada que deshacer."}
     n = c.execute("update filas set estado='PENDIENTE', nombre=null, como=null, accion=null where accion=?",
@@ -521,12 +534,12 @@ class Manejador(BaseHTTPRequestHandler):
                     SINCRONIZADOR.forzar = True
                     return self.responder({"mensaje": f"Reintentando {n} envíos a FileMaker"})
                 if self.path == "/api/reabrir":
-                    return self.responder(reabrir(c, d["clave"]))
+                    return self.responder(reabrir(c, d["clave"], d.get("texto")))
                 if self.path == "/api/normalizar":
                     return self.responder(normalizar(c, d["clave"], set(d["llaves"]), d["nombre"],
                                                      d.get("como", "manual")))
                 if self.path == "/api/deshacer":
-                    return self.responder(deshacer(c))
+                    return self.responder(deshacer(c, d.get("accion")))
                 if self.path == "/api/exportar":
                     return self.responder(exportar(c))
             self.responder({"error": "no encontrado"}, 404)

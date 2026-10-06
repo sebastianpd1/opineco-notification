@@ -41,8 +41,8 @@ function App() {
 
   // Después de normalizar: si al grupo le quedan variaciones, la siguiente pasa a ser la ★;
   // si no, se abre el siguiente modelo de la lista. La burbuja trae Deshacer unos segundos.
-  const despuesDeNormalizar = async (texto, claveAntes, principalAntes, grupo) => {
-    mostrar({ texto, deshacer: { clave: claveAntes, principal: principalAntes } }, 6000);
+  const despuesDeNormalizar = async (texto, claveAntes, principalAntes, grupo, accion) => {
+    mostrar({ texto, deshacer: { clave: claveAntes, principal: principalAntes, accion } }, 6000);
     const l = await cargar();
     if (grupo.variaciones.length) {
       const sigue = grupo.variaciones.find((v) => v.llave === principalAntes);
@@ -57,7 +57,7 @@ function App() {
   const deshacerDesdeBurbuja = async (info) => {
     setToast(null);
     try {
-      const r = await api("/api/deshacer", {});
+      const r = await api("/api/deshacer", { accion: info.accion });
       setClave(info.clave); setPrincipal(info.principal); setVersion((x) => x + 1);
       await cargar();
       avisar(r.mensaje);
@@ -125,20 +125,20 @@ function App() {
             </tbody>
           </table>` : html`
           <table>
-            <thead><tr><th>SKU</th><th>Impresora original</th><th>Normalizada como</th><th>Cómo</th><th>FileMaker</th><th></th></tr></thead>
+            <thead><tr><th></th><th>SKU</th><th>Impresora original</th><th>Normalizada como</th><th>Cómo</th><th>FileMaker</th></tr></thead>
             <tbody>
               ${lista.filas.map((f) => html`
                 <tr key=${f.id}>
+                  <td><button title="Esta impresora vuelve a Pendientes para corregirla"
+                    onClick=${async () => {
+                      try { const r = await api("/api/reabrir", { clave: f.clave, texto: f.texto }); avisar(r.mensaje); await cargar(); }
+                      catch (e) { avisar(e.message); }
+                    }}>Reabrir</button></td>
                   <td class="sku">${f.sku}</td>
                   <td>${f.texto}</td>
                   <td><b>${f.nombre}</b></td>
                   <td class="nota">${{ auto: "automático", manual: "manual", google: "Google" }[f.como] || f.como}</td>
                   <td class="nota">${envioFM(f)}</td>
-                  <td><button title="El grupo vuelve a Pendientes para corregirlo"
-                    onClick=${async () => {
-                      try { const r = await api("/api/reabrir", { clave: f.clave }); avisar(r.mensaje); await cargar(); }
-                      catch (e) { avisar(e.message); }
-                    }}>Reabrir</button></td>
                 </tr>`)}
             </tbody>
           </table>`}
@@ -225,9 +225,13 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
     try {
       const r = await api("/api/normalizar", { clave, llaves: usar, nombre: valor, como });
       const d = await api(`/api/grupo?clave=${encodeURIComponent(clave)}`);
-      await alNormalizar(`${r.registros} registros normalizados como “${r.nombre}”`, clave, principal, d);
+      const texto = r.tal_cual
+        ? `“${r.nombre}” completado tal cual (${r.registros} registros)`
+        : `${r.textos.map((t) => `“${t}”`).join(", ")} → normalizado como “${r.nombre}” (${r.registros} registros)`;
+      await alNormalizar(texto, clave, principal, d, r.accion);
     } catch (e) { avisar(e.message); }
-    enviando.current = false;
+    // pausa corta: una pulsación = una acción, aunque la tecla rebote o quede apretada
+    setTimeout(() => { enviando.current = false; }, 600);
   };
 
   // Teclado: ↑ ↓ eligen la variación; → la completa tal cual y pasa a la siguiente.
@@ -236,6 +240,7 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
     const tecla = (e) => {
       const t = e.target;
       if (!g || !g.variaciones.length || (t && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text")))) return;
+      if (e.repeat) { e.preventDefault(); return; }  // tecla mantenida: no repetir acciones
       if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(i + 1, g.variaciones.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(i - 1, 0)); }
       else if (e.key === "ArrowRight") {
