@@ -9,6 +9,9 @@ cd ~/opineco-notification/normalizador
 python3 web.py
 ```
 
+O con doble clic en **Normalizador** del Escritorio. Para crear ese ícono (una vez):
+`cp ~/opineco-notification/normalizador/Normalizador.command ~/Desktop/`
+
 Se abre http://127.0.0.1:8765, o el siguiente puerto libre que diga la Terminal (Control+C en la Terminal para cerrarla). Usa los mismos 3 CSV de
 `datos/`. La primera vez los carga solos; `python3 web.py --reimportar` los vuelve a cargar
 (borra lo normalizado en la web).

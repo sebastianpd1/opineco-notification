@@ -30,6 +30,7 @@ DATOS = BASE / "datos"
 DB = DATOS / "web.db"
 PAGINA = BASE / "web"
 PUERTO = 8765
+ALGORITMO = "literal-1"  # si cambia y no hay nada normalizado, los CSV se recargan solos al abrir
 LOCK = threading.Lock()
 
 ESQUEMA = """
@@ -365,8 +366,16 @@ def puerto_ocupado(puerto):
 
 def main():
     c = conectar()
-    if "--reimportar" in sys.argv or not c.execute("select count(*) from filas").fetchone()[0]:
+    c.execute("create table if not exists meta(k text primary key, v text)")
+    version = c.execute("select v from meta where k='algoritmo'").fetchone()
+    hechos = c.execute("select count(*) from filas where estado='COMPLETADO'").fetchone()[0]
+    vacio = not c.execute("select count(*) from filas").fetchone()[0]
+    if "--reimportar" in sys.argv or vacio or (version is None or version[0] != ALGORITMO) and hechos == 0:
         importar(c)
+    elif version is None or version[0] != ALGORITMO:
+        print("Aviso: cambió el algoritmo, pero ya hay registros normalizados; no recargo para no perderlos.")
+    c.execute("insert or replace into meta values('algoritmo', ?)", (ALGORITMO,))
+    c.commit()
     servidor = None
     for puerto in range(PUERTO, PUERTO + 20):  # si el puerto está ocupado (otra app), usa el siguiente libre
         if puerto_ocupado(puerto):
