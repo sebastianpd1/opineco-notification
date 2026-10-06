@@ -72,7 +72,7 @@ function App() {
                 <tr key=${f.id} class=${f.clave === clave ? "activa" : ""}>
                   <td class="sku">${f.sku}</td>
                   <td>${f.texto}</td>
-                  <td><button onClick=${() => { setClave(f.clave); setPrincipal(f.texto); }}>Verificar</button></td>
+                  <td><button class="primario" onClick=${() => { setClave(f.clave); setPrincipal(f.texto); }}>Verificar</button></td>
                 </tr>`)}
             </tbody>
           </table>` : html`
