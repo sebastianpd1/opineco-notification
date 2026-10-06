@@ -6,9 +6,11 @@ Uso:  python3 web.py            → abre http://127.0.0.1:8765 (o el siguiente p
 
 Lee datos/inventario.csv, datos/normalizada.csv y datos/compatibility.csv (los mismos de norma.py).
 Regla: los SKU con filas en la normalizada usan esas; los SKU sin normalizada usan COMPATIBILITY.
-Grupos: números del texto + marca del SKU según INVENTARIO.
+Grupos: marca del SKU según INVENTARIO + todos los números del texto. Cada registro es una fila tal cual;
+lo único que se limpia son espacios y saltos de línea sobrantes. No se adivina nada.
 """
 import json
+import re
 import os
 import shutil
 import sqlite3
@@ -55,6 +57,18 @@ def conectar():
     return c
 
 
+# ------------------------------------------------------------------ reglas (literales, sin adivinar)
+
+def sin_espacios_sobrantes(texto):
+    """Lo ÚNICO que se limpia: espacios y saltos de línea repetidos o en los bordes."""
+    return re.sub(r"\s+", " ", texto or "").strip()
+
+
+def clave(marca, texto):
+    """Búsqueda = marca del SKU en el INVENTARIO + todos los números del texto (P1102 → HP|1102)."""
+    return f"{marca}|{re.sub(r'[^0-9]', '', texto)}"
+
+
 # ------------------------------------------------------------------ carga de los CSV
 
 def importar(c):
@@ -70,24 +84,25 @@ def importar(c):
     con_normalizada = {norma.celda(f, col["sku"]) for f in normalizada}
 
     def agregar(sku, origen, fm_id, marca_tabla, texto):
-        # Búsqueda = números + marca del INVENTARIO para ese SKU. Solo si el SKU no está en el
-        # inventario se usa la marca que traía la normalizada / COMPATIBILITY.
+        # Cada registro es una fila, tal cual (solo sin espacios/saltos sobrantes).
+        # Marca = la del INVENTARIO para ese SKU; si el SKU no está en el inventario, la de la tabla.
+        texto = sin_espacios_sobrantes(texto)
+        if not texto:
+            return
         marca = (inventario.get(sku) or marca_tabla or "SIN MARCA").strip().upper()
-        marca_item = marca_tabla
         c.execute("insert into filas(sku, origen, fm_id, marca_item, marca, texto, clave) values(?,?,?,?,?,?,?)",
-                  (sku, origen, fm_id, marca_item, marca, texto, norma.clave_grupo(marca, texto)))
+                  (sku, origen, fm_id, marca_tabla, marca, texto, clave(marca, texto)))
 
     c.execute("delete from filas")
     c.execute("delete from acciones")
     for f in normalizada:
-        for texto in norma.piezas(norma.celda(f, col["impresora"])):
-            agregar(norma.celda(f, col["sku"]), "NORMALIZADA", "", norma.celda(f, col["marca"]), texto)
+        agregar(norma.celda(f, col["sku"]), "NORMALIZADA", "", norma.celda(f, col["marca"]),
+                f[col["impresora"]])
     for f in norma.leer_csv(archivos["compatibility"]):
         sku = norma.celda(f, 1)
         if not sku or sku in con_normalizada:
             continue
-        for texto in norma.piezas(norma.celda(f, 3)):
-            agregar(sku, "COMPATIBILITY", norma.celda(f, 0), norma.celda(f, 2), texto)
+        agregar(sku, "COMPATIBILITY", norma.celda(f, 0), norma.celda(f, 2), f[3] if len(f) > 3 else "")
     c.commit()
     total = c.execute("select count(*) from filas").fetchone()[0]
     print(f"Cargados {total} registros ({len(con_normalizada)} SKU desde la normalizada; el resto desde COMPATIBILITY).")
@@ -96,8 +111,8 @@ def importar(c):
 # ------------------------------------------------------------------ lógica
 
 def igual(texto):
-    """Dos textos son la misma variación si solo difieren en espacios/saltos sobrantes o mayúsculas."""
-    return norma.limpiar(texto).upper()
+    """Dos textos son la misma variación solo si son idénticos después de limpiar espacios/saltos."""
+    return sin_espacios_sobrantes(texto)
 
 
 def nueva_accion(c, tipo, detalle):
@@ -116,7 +131,7 @@ def loop_automatico(c):
         if len({igual(t) for t in textos}) == 1:
             nombre = max(set(textos), key=textos.count)
             filas += c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
-                               " where clave=? and estado='PENDIENTE'", (norma.limpiar(nombre), accion, clave)).rowcount
+                               " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
             completados += 1
     c.execute("update acciones set detalle=? where id=?",
               (json.dumps({"grupos_completados": completados, "registros": filas}), accion))
@@ -163,7 +178,7 @@ def grupo(c, clave):
 
 
 def normalizar(c, clave, llaves, nombre, como):
-    nombre = norma.limpiar(nombre)
+    nombre = sin_espacios_sobrantes(nombre)
     if not nombre:
         raise ValueError("El nombre está vacío.")
     if "," in nombre:
@@ -260,8 +275,8 @@ def verificar_en_google(g, consulta=None):
     candidatos, explicacion = preguntar_agente(g["marca"], variaciones, resultados)
     # Anti-alucinación: cada candidato debe aparecer (sin espacios ni guiones) en los resultados reales.
     todo = norma.compacto(" ".join(r["titulo"] + " " + r["texto"] for r in resultados))
-    revisados = [{"nombre": norma.limpiar(n), "en_google": norma.compacto(n) in todo}
-                 for n in candidatos if norma.limpiar(n)]
+    revisados = [{"nombre": sin_espacios_sobrantes(n), "en_google": norma.compacto(n) in todo}
+                 for n in candidatos if sin_espacios_sobrantes(n)]
     return {"consulta": consulta, "candidatos": revisados, "explicacion": explicacion,
             "resultados": [{"titulo": r["titulo"], "texto": r["texto"][:200]} for r in resultados]}
 
