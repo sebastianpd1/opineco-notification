@@ -233,7 +233,7 @@ function Grupo({ clave, principal, avisar, alTerminar }) {
           <ol class="resultados">${google.resultados.map((r, i) => html`<li key=${i}><b>${r.titulo}</b> — ${r.texto}</li>`)}</ol>
         </details>`}
       ${g.ya_normalizados.length > 0 && html`
-        <div class="nota" style=${{ marginTop: "8px" }}>Ya normalizados en este grupo:</div>
+        <div class="nota" style=${{ marginTop: "8px" }}>Nombres ya usados en este grupo (toca uno para reutilizarlo):</div>
         <div class="chips">${g.ya_normalizados.map((n) => html`<span class="chip" onClick=${() => setNombre(n)}>${n}</span>`)}</div>`}
     </div>
 
