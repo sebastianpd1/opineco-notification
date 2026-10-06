@@ -331,9 +331,17 @@ def main():
     c = conectar()
     if "--reimportar" in sys.argv or not c.execute("select count(*) from filas").fetchone()[0]:
         importar(c)
-    servidor = ThreadingHTTPServer(("127.0.0.1", PUERTO), Manejador)
+    servidor = None
+    for puerto in range(PUERTO, PUERTO + 20):  # si el puerto está ocupado (otra app), usa el siguiente libre
+        try:
+            servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+            break
+        except OSError:
+            continue
+    if not servidor:
+        sys.exit(f"No hay puertos libres entre {PUERTO} y {PUERTO + 19}.")
     servidor.c = c
-    url = f"http://localhost:{PUERTO}"
+    url = f"http://localhost:{puerto}"
     print(f"Normalizador web en {url}  (Control+C para cerrar)")
     if "--sin-navegador" not in sys.argv:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
