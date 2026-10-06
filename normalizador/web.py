@@ -6,6 +6,7 @@ Uso:  python3 web.py            → abre http://127.0.0.1:8765 (o el siguiente p
 
 Lee datos/inventario.csv, datos/normalizada.csv y datos/compatibility.csv (los mismos de norma.py).
 Regla: los SKU con filas en la normalizada usan esas; los SKU sin normalizada usan COMPATIBILITY.
+Grupos: números del texto + marca del SKU según INVENTARIO.
 """
 import json
 import os
@@ -33,7 +34,7 @@ ESQUEMA = """
 create table if not exists filas(
   id integer primary key,
   sku text, origen text, fm_id text, marca_item text,
-  marca text,                         -- marca de la impresora (del texto; si no, la del producto)
+  marca text,                         -- marca del SKU según INVENTARIO (la de la tabla si no está)
   texto text,                         -- impresora tal como venía, sin espacios/saltos sobrantes
   clave text,                         -- MARCA|números: la búsqueda "solo números + marca"
   estado text default 'PENDIENTE',    -- PENDIENTE o COMPLETADO
@@ -68,9 +69,11 @@ def importar(c):
     normalizada = [f for f in filas_norm if norma.celda(f, col["sku"]) and norma.celda(f, col["impresora"])]
     con_normalizada = {norma.celda(f, col["sku"]) for f in normalizada}
 
-    def agregar(sku, origen, fm_id, marca_item, texto):
-        marca_item = marca_item or inventario.get(sku, "")
-        marca, _ = norma.marca_impresora(texto, marca_item)
+    def agregar(sku, origen, fm_id, marca_tabla, texto):
+        # Búsqueda = números + marca del INVENTARIO para ese SKU. Solo si el SKU no está en el
+        # inventario se usa la marca que traía la normalizada / COMPATIBILITY.
+        marca = (inventario.get(sku) or marca_tabla or "SIN MARCA").strip().upper()
+        marca_item = marca_tabla
         c.execute("insert into filas(sku, origen, fm_id, marca_item, marca, texto, clave) values(?,?,?,?,?,?,?)",
                   (sku, origen, fm_id, marca_item, marca, texto, norma.clave_grupo(marca, texto)))
 

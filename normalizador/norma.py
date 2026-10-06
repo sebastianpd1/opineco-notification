@@ -265,7 +265,8 @@ def detectar_columnas_normalizada(filas):
     resto = [i for i in cols if i != sku]
     marca = max(resto, key=lambda i: razon(i, lambda v: v.upper() in MARCAS))
     resto = [i for i in resto if i != marca]
-    impresora = max(resto, key=lambda i: len({f[i].strip().upper() for f in muestra}))
+    impresora = max(resto, key=lambda i: (len({f[i].strip().upper() for f in muestra}),
+                                           sum(len(f[i]) for f in muestra)))
     categoria = [i for i in resto if i != impresora][0]
     return {"sku": sku, "marca": marca, "impresora": impresora, "categoria": categoria}
 
