@@ -43,11 +43,19 @@ Nunca abras una tanda tú.
   confírmalo en Google o mándalo a revisión.
 - Quita prefijos/sufijos de ruido (`LJ`→LaserJet, "printer", "impresora", "series", mayúsculas,
   espacios), pero conserva los que distinguen familia.
-- **Variante:** si el texto trae variante (`w`, `dw`, `nw`, `dn`, `fdw`...) va en `variante` y en el
-  nombre. Si no la trae, deja `variante` vacía y el nombre sin variante; no la inventes.
-- `modelo` es el modelo base sin variante (`P1102`, `M251`, `2130`, `315`).
-- Formato del nombre: `Familia Modelo+variante`, **sin la marca**, como lo escribe el fabricante
-  (`LaserJet Pro P1102w`, `DeskJet 2130`, `HL-L2350DW`, `DCP-J100`). La marca va solo en el campo
+- **Sufijos de accesorios fuera del nombre.** `W` (wifi), `N` (red), `D` (dúplex), `F` (fax), `T`,
+  `X`, `H` y sus combinaciones (`DW`, `NW`, `DN`, `FDW`...) y `MFP` **no cambian la compatibilidad**
+  (regla de Opine Co, 99,9% de los casos): el nombre queda en el **modelo base**. `P1102`, `P1102w` y
+  `P1102nw` son la misma impresora → `LaserJet Pro P1102`. Que falte o sobre un sufijo **no** es motivo
+  para revisión humana: decide igual. Si quieres, guarda el sufijo original en `variante` (solo
+  informativo). El código igual quita estos sufijos si se te escapan.
+- **Sufijos con C (color) sí pueden ser otra máquina**: `e-STUDIO 2505` (mono) y `2505AC` (color) usan
+  tóner distinto; igual `TASKalfa 2552ci`. Ahí conserva la parte de color (`2505AC`, `2552ci`,
+  `MF632C`) y quita solo lo de accesorios. Si el mismo número existe solo en una versión (Brother
+  `DCP-130C`: no hay DCP-130 mono), el base sin C también sirve; ante la duda, conserva la C.
+- `modelo` es el modelo base (`P1102`, `M251`, `2130`, `315`).
+- Formato del nombre: `Familia Modelo base`, **sin la marca** y sin sufijos de accesorios
+  (`LaserJet Pro P1102`, `DeskJet 2130`, `HL-L2350`, `DCP-J100`). La marca va solo en el campo
   `marca`: en la web la marca es la categoría y dentro se listan los modelos, así que repetirla en el
   nombre sobra. Mantén el mismo nombre para la misma impresora en todo el trabajo (mira
   `ya_aprobados_en_este_grupo`).
@@ -82,13 +90,14 @@ Cada decisión nombra el `grupo` y los `textos` exactos (tal como vinieron) que 
 ```json
 [
   {"grupo": "HP|1102", "textos": ["P1102w", "p1102w", "HP LaserJet Pro P1102w"], "estado": "OK",
-   "marca": "HP", "familia": "LaserJet Pro", "modelo": "P1102", "variante": "w",
-   "nombre": "LaserJet Pro P1102w",
+   "marca": "HP", "familia": "LaserJet Pro", "modelo": "P1102",
+   "nombre": "LaserJet Pro P1102",
    "evidencia_titulo": "HP LaserJet Pro P1102w - Soporte HP", "evidencia_url": "https://...",
    "nota": "opcional"},
   {"grupo": "HP|251", "textos": ["M251"], "estado": "REVISION",
-   "nota": "Puede ser M251n o M251nw, Google no aclara"}
+   "nota": "Puede ser Color LaserJet Pro M251 o LaserJet Pro M251 mono, no se distingue"}
 ]
 ```
 
-Textos con variantes distintas (`P1102` y `P1102w`) van en decisiones distintas.
+Textos que solo difieren en sufijos de accesorios (`P1102`, `P1102w`, `LJ P1102 W`) van en **una
+sola** decisión con el nombre base.

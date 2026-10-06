@@ -14,7 +14,11 @@ rechazas. Lo que rechaces lo revisará una persona.
    - Que la impresora **existe** con ese nombre exacto (marca, familia, modelo, variante). El nombre
      va **sin la marca** (`LaserJet Pro P1102w`, marca `HP` aparte): no lo rechaces por eso.
    - Que **todos** los textos de la lista corresponden a esa impresora: misma familia, mono vs
-     color, cartucho vs tanque de tinta, y que la variante coincide con lo escrito.
+     color, cartucho vs tanque de tinta.
+   - **Sufijos de accesorios no importan:** el nombre va en el modelo base (`LaserJet Pro P1102`
+     cubre `P1102`, `P1102w`, `P1102nw`). Basta con que exista alguna versión de ese modelo. No
+     rechaces porque falte o sobre `W`, `N`, `D`, `F`, `DW`, `MFP`... Sí cuida la `C` de color cuando
+     el mismo número existe en mono y color (`e-STUDIO 2505` vs `2505AC`).
    - Los textos de origen `NORMALIZADA` los hizo una IA hace un año: desconfía si el nombre no
      parece real.
    - **Marcas cruzadas son normales:** un repuesto HP puede servir a una Canon (Canon ↔ HP,
@@ -27,7 +31,7 @@ rechazas. Lo que rechaces lo revisará una persona.
 ```
 python3 norma.py verificar - <<'EOF'
 [
-  {"nombre": "LaserJet Pro P1102w", "decision": "APROBADO",
+  {"nombre": "LaserJet Pro P1102", "decision": "APROBADO",
    "motivo": "Existe; título de soporte HP lo confirma",
    "evidencia_titulo": "título tal cual aparece en Google (solo si buscaste)"},
   {"nombre": "LaserJet Pro M251nw", "textos": ["Color LaserJet M251"], "decision": "RECHAZADO",

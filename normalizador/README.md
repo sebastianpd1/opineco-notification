@@ -58,6 +58,9 @@ Se trabaja por **tandas** para controlar el consumo del plan:
 
 Sin tanda abierta el agente no procesa nada. Avance general: `python3 norma.py estado`.
 
+Si cambian las reglas, `python3 norma.py reabrir` devuelve a pendiente lo que fue a revisión humana
+(o `--nota "texto"` para solo algunos) y se reprocesa en la próxima tanda.
+
 ## Resultado
 
 `python3 norma.py exportar` deja en `datos/salida/`:

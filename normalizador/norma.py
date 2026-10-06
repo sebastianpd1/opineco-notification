@@ -13,6 +13,7 @@ Comandos (todos con: python3 norma.py <comando> ...):
   proponer [archivo|-]          Agente 1 guarda sus decisiones (JSON). El código valida evidencia y regla de oro.
   lote-verificar [--n N]        Propuestas pendientes de verificación, agrupadas por nombre.
   verificar [archivo|-]         Agente 2 aprueba o rechaza (JSON).
+  reabrir [--estado E] [--nota T]  Devuelve registros a PENDIENTE para reprocesarlos (por defecto los de revisión).
   exportar                      Escribe datos/salida/aprobados.csv y revision_humana.csv para importar a FileMaker.
 """
 import argparse
@@ -120,6 +121,10 @@ def conectar():
     # (Corrige también nombres guardados antes de esta regla.)
     c.execute("update registros set nombre = trim(substr(nombre, length(marca) + 1))"
               " where marca is not null and marca != '' and upper(nombre) like upper(marca) || ' %'")
+    for (nombre,) in c.execute("select distinct nombre from registros where nombre is not null").fetchall():
+        base = sin_sufijo(nombre)
+        if base != nombre:
+            c.execute("update registros set nombre=? where nombre=?", (base, nombre))
     c.commit()
     return c
 
@@ -130,6 +135,23 @@ def sin_marca(nombre, marca):
     if marca and nombre.upper().startswith(marca.strip().upper() + " "):
         nombre = nombre[len(marca.strip()):].strip()
     return nombre
+
+
+# Sufijos de accesorios (W wifi, N red, D dúplex, F fax, T bandeja, X/H equipamiento, MFP): según Opine Co
+# no cambian la compatibilidad, así que el nombre normalizado queda en el modelo base (P1102w → P1102).
+# Los sufijos con C (color: 2505AC, 2552ci) NO se quitan aquí: pueden ser otra máquina; los decide el agente.
+SUFIJO_PEGADO = re.compile(r"(?<=\d)(?:[DNWFTXH]{1,4}|MFP)$", re.IGNORECASE)
+SUFIJO_SUELTO = re.compile(r"^(?:[DNWFTXH]{1,4}|MFP)$", re.IGNORECASE)
+
+
+def sin_sufijo(nombre):
+    """'LaserJet Pro P1102w' → 'LaserJet Pro P1102'; 'HL-L2350DW' → 'HL-L2350'; 'M1132 MFP' → 'M1132'."""
+    partes = (nombre or "").split()
+    while len(partes) > 1 and SUFIJO_SUELTO.match(partes[-1]) and re.search(r"\d$", partes[-2]):
+        partes.pop()
+    if partes:
+        partes[-1] = SUFIJO_PEGADO.sub("", partes[-1])
+    return " ".join(partes)
 
 
 def plano(s):
@@ -420,7 +442,7 @@ def cmd_proponer(a):
             resumen["sin_registros"].append(d.get("textos") or d.get("rids") or d.get("rid"))
             continue
         if d.get("nombre"):
-            d["nombre"] = sin_marca(d["nombre"], d.get("marca"))
+            d["nombre"] = sin_sufijo(sin_marca(d["nombre"], d.get("marca")))
         for rid in rids:
             fila = c.execute("select texto, estado from registros where rid=?", (rid,)).fetchone()
             if not fila or fila["estado"] != "PENDIENTE":
@@ -607,6 +629,23 @@ def cmd_chrome(_a):
 
 # ---------------------------------------------------------------- exportar
 
+def cmd_reabrir(a):
+    """Devuelve a PENDIENTE los registros de un estado (por defecto REVISION_HUMANA) para reprocesarlos
+    con reglas nuevas. Opcional --nota: solo los que tengan ese texto en la nota o motivo."""
+    c = conectar()
+    sql = "update registros set estado='PENDIENTE', marca=null, familia=null, modelo=null, variante=null," \
+          " nombre=null, evidencia_titulo=null, evidencia_url=null, nota=null, motivo_verificador=null" \
+          " where estado=?"
+    args = [a.estado]
+    if a.nota:
+        sql += " and (coalesce(nota,'') || ' ' || coalesce(motivo_verificador,'')) like ?"
+        args.append(f"%{a.nota}%")
+    n = c.execute(sql, args).rowcount
+    c.commit()
+    print(f"{n} registros vuelven a PENDIENTE. Se procesan en la próxima tanda.")
+    cmd_estado(a)
+
+
 def cmd_exportar(_a):
     c = conectar()
     SALIDA.mkdir(parents=True, exist_ok=True)
@@ -649,6 +688,10 @@ def main():
     s.set_defaults(f=cmd_lote_verificar)
     s = sub.add_parser("verificar"); s.add_argument("archivo", nargs="?"); s.set_defaults(f=cmd_verificar)
     sub.add_parser("exportar").set_defaults(f=cmd_exportar)
+    s = sub.add_parser("reabrir")
+    s.add_argument("--estado", default="REVISION_HUMANA")
+    s.add_argument("--nota", help="solo los que tengan este texto en la nota o el motivo")
+    s.set_defaults(f=cmd_reabrir)
     a = ap.parse_args()
     a.f(a)
 
