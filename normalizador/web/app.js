@@ -1,6 +1,6 @@
 // Normalizador de impresoras — React 18 sin compilación: React, ReactDOM y htm vienen en web/vendor/
 // (copiados al proyecto, así la página funciona sin internet).
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 const { createRoot } = ReactDOM;
 
 const html = htm.bind(React.createElement);
@@ -23,16 +23,46 @@ function App() {
   const [pestana, setPestana] = useState("PENDIENTE");
   const [clave, setClave] = useState(null);
   const [principal, setPrincipal] = useState(null);  // la impresora en la que se hizo clic
-  const [toast, setToast] = useState("");
+  const [version, setVersion] = useState(0);         // fuerza recargar el panel aunque la ★ no cambie
+  const [toast, setToast] = useState(null);  // { texto, deshacer?: { clave, principal } }
   const [ocupado, setOcupado] = useState(false);
+  const reloj = useRef(null);
 
-  const avisar = (m) => { setToast(m); setTimeout(() => setToast(""), 3500); };
+  const mostrar = (t, ms) => { clearTimeout(reloj.current); setToast(t); reloj.current = setTimeout(() => setToast(null), ms); };
+  const avisar = (m) => mostrar({ texto: m }, 3500);
   const [fm, setFm] = useState(null);
 
   const cargar = useCallback(async () => {
     setResumen(await api("/api/resumen"));
-    setLista(await api(`/api/filas?estado=${pestana}&q=${encodeURIComponent(q)}&offset=${offset}&limite=${POR_PAGINA}`));
+    const l = await api(`/api/filas?estado=${pestana}&q=${encodeURIComponent(q)}&offset=${offset}&limite=${POR_PAGINA}`);
+    setLista(l);
+    return l;
   }, [q, offset, pestana]);
+
+  // Después de normalizar: si al grupo le quedan variaciones, la siguiente pasa a ser la ★;
+  // si no, se abre el siguiente modelo de la lista. La burbuja trae Deshacer unos segundos.
+  const despuesDeNormalizar = async (texto, claveAntes, principalAntes, grupo) => {
+    mostrar({ texto, deshacer: { clave: claveAntes, principal: principalAntes } }, 6000);
+    const l = await cargar();
+    if (grupo.variaciones.length) {
+      const sigue = grupo.variaciones.find((v) => v.llave === principalAntes);
+      setPrincipal(sigue ? sigue.llave : grupo.variaciones[0].llave);
+      setVersion((x) => x + 1);
+    } else {
+      const sig = l.filas.find((f) => f.clave !== claveAntes);
+      if (sig) { setClave(sig.clave); setPrincipal(sig.texto); } else setClave(null);
+    }
+  };
+
+  const deshacerDesdeBurbuja = async (info) => {
+    setToast(null);
+    try {
+      const r = await api("/api/deshacer", {});
+      setClave(info.clave); setPrincipal(info.principal); setVersion((x) => x + 1);
+      await cargar();
+      avisar(r.mensaje);
+    } catch (e) { avisar(e.message); }
+  };
 
   useEffect(() => { cargar().catch((e) => avisar(e.message)); }, [cargar]);
 
@@ -121,15 +151,14 @@ function App() {
       </section>
       <section class="panel">
         ${clave
-          ? html`<${Grupo} clave=${clave} principal=${principal} avisar=${avisar}
-                   alTerminar=${async (quedan) => {
-                     await cargar();
-                     if (!quedan) setClave(null);
-                   }} />`
+          ? html`<${Grupo} clave=${clave} principal=${principal} version=${version} avisar=${avisar}
+                   alNormalizar=${despuesDeNormalizar} />`
           : html`<div class="vacio">Toca <b>Verificar</b> en una impresora para ver sus coincidencias.</div>`}
       </section>
     </main>
-    ${toast && html`<div class="toast">${toast}</div>`}
+    ${toast && html`<div class="toast">${toast.texto}
+      ${toast.deshacer && html`<button class="deshacer" onClick=${() => deshacerDesdeBurbuja(toast.deshacer)}>Deshacer</button>`}
+    </div>`}
   `;
 }
 
@@ -157,7 +186,7 @@ function EstadoFM({ fm, avisar }) {
   `;
 }
 
-function Grupo({ clave, principal, avisar, alTerminar }) {
+function Grupo({ clave, principal, version, avisar, alNormalizar }) {
   const [g, setG] = useState(null);
   const [marcadas, setMarcadas] = useState({});
   const [nombre, setNombre] = useState("");
@@ -165,6 +194,8 @@ function Grupo({ clave, principal, avisar, alTerminar }) {
   const [google, setGoogle] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState("");
+  const [sel, setSel] = useState(0);          // variación seleccionada para el teclado (parte en la ★)
+  const enviando = useRef(false);
 
   const cargarGrupo = useCallback(async () => {
     const d = await api(`/api/grupo?clave=${encodeURIComponent(clave)}`);
@@ -176,28 +207,48 @@ function Grupo({ clave, principal, avisar, alTerminar }) {
   }, [clave, principal]);
 
   useEffect(() => {
-    setNombre(""); setGoogle(null); setError(""); setG(null);
+    setNombre(""); setGoogle(null); setError(""); setG(null); setSel(0);
     cargarGrupo().then((d) => {
       setConsulta(`${d.marca} ${d.variaciones[0]?.texto || ""} impresora`.trim());
     }).catch((e) => setError(e.message));
-  }, [clave, principal, cargarGrupo]);
+  }, [clave, principal, version, cargarGrupo]);
+
+  const llaves = g ? g.variaciones.filter((v) => marcadas[v.llave]).map((v) => v.llave) : [];
+  const cuantos = g ? g.variaciones.filter((v) => marcadas[v.llave]).reduce((s, v) => s + v.cantidad, 0) : 0;
+
+  // soloLlaves: para → (completa solo la seleccionada, tal cual)
+  const normalizarComo = async (valor, como, soloLlaves) => {
+    const usar = soloLlaves || llaves;
+    if (!usar.length) return avisar("Marca al menos una variación.");
+    if (enviando.current) return;
+    enviando.current = true;
+    try {
+      const r = await api("/api/normalizar", { clave, llaves: usar, nombre: valor, como });
+      const d = await api(`/api/grupo?clave=${encodeURIComponent(clave)}`);
+      await alNormalizar(`${r.registros} registros normalizados como “${r.nombre}”`, clave, principal, d);
+    } catch (e) { avisar(e.message); }
+    enviando.current = false;
+  };
+
+  // Teclado: ↑ ↓ eligen la variación; → la completa tal cual y pasa a la siguiente.
+  // No actúa mientras escribes en un campo de texto.
+  useEffect(() => {
+    const tecla = (e) => {
+      const t = e.target;
+      if (!g || !g.variaciones.length || (t && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text")))) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(i + 1, g.variaciones.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(i - 1, 0)); }
+      else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const v = g.variaciones[Math.min(sel, g.variaciones.length - 1)];
+        normalizarComo(v.texto, "manual", [v.llave]);
+      }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  });
 
   if (!g) return html`<div class="vacio">${error || "Cargando…"}</div>`;
-
-  const llaves = g.variaciones.filter((v) => marcadas[v.llave]).map((v) => v.llave);
-  const cuantos = g.variaciones.filter((v) => marcadas[v.llave]).reduce((s, v) => s + v.cantidad, 0);
-
-  const normalizarComo = async (valor, como) => {
-    if (!llaves.length) return avisar("Marca al menos una variación.");
-    try {
-      const r = await api("/api/normalizar", { clave, llaves, nombre: valor, como });
-      avisar(`${r.registros} registros normalizados como “${r.nombre}”`);
-      const d = await cargarGrupo();
-      setNombre(""); setGoogle(null);
-      setConsulta(`${d.marca} ${d.variaciones[0]?.texto || ""} impresora`.trim());
-      await alTerminar(d.variaciones.length);
-    } catch (e) { avisar(e.message); }
-  };
 
   const buscarGoogle = async () => {
     setBuscando(true); setError(""); setGoogle(null);
@@ -251,8 +302,9 @@ function Grupo({ clave, principal, avisar, alTerminar }) {
 
     <div>
       ${g.variaciones.length === 0 && html`<div class="vacio">Este grupo ya no tiene pendientes.</div>`}
-      ${g.variaciones.map((v) => html`
-        <div class="var" key=${v.llave}>
+      ${g.variaciones.length > 0 && html`<div class="nota atajo">Teclado: ↑ ↓ eligen · → completa la elegida tal cual y pasa a la siguiente</div>`}
+      ${g.variaciones.map((v, i) => html`
+        <div class=${"var" + (i === sel ? " sel" : "")} key=${v.llave} onClick=${() => setSel(i)}>
           <input type="checkbox" checked=${!!marcadas[v.llave]}
             title="Desmarca si esta variación es otra impresora"
             onChange=${(e) => setMarcadas({ ...marcadas, [v.llave]: e.target.checked })} />

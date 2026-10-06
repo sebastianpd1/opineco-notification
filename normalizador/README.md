@@ -26,6 +26,10 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
 - **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.
 - **Buscar y verificar en Google:** busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
   encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.
+- **Teclado:** ↑ ↓ eligen una variación del grupo; **→** la completa tal cual (como "Solo esta" +
+  "Normalizar como este") y pasa a la siguiente. No actúa mientras escribes en un campo.
+- Al normalizar, la burbuja de abajo trae **Deshacer** unos segundos, y se pasa solo a lo siguiente:
+  la próxima variación del grupo o, si el grupo quedó vacío, el siguiente modelo de la lista.
 - **Deshacer** revierte la última acción. **Exportar CSV** deja `datos/salida/normalizados_web.csv`.
 
 ### Conectado a FileMaker (recomendado)

@@ -45,7 +45,10 @@
   .nota { color:var(--gris); font-size:12px; }
   .error { color:var(--rojo); }
   .resultados { font-size:12px; color:var(--gris); margin:6px 0 0; padding-left:18px; }
-  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d2330; color:#fff; padding:8px 14px; border-radius:8px; z-index:5; }
+  .toast button.deshacer { margin-left:12px; background:#fff; color:#1d2330; border-color:#fff; font-weight:600; }
+  .var.sel { background:#eaf2ff; outline:2px solid #1f6feb; outline-offset:-2px; border-radius:6px; }
+  .atajo { margin:4px 0 6px; }
+  .toast { display:flex; align-items:center; position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d2330; color:#fff; padding:8px 14px; border-radius:8px; z-index:5; }
   .pestanas { display:flex; gap:4px; padding:8px 10px 0; border-bottom:1px solid var(--borde); position:sticky; top:0; background:#fff; z-index:1; }
   .pestana { border:1px solid var(--borde); border-bottom:none; border-radius:6px 6px 0 0; background:var(--suave); }
   .pestana.activa { background:#fff; font-weight:600; position:relative; top:1px; }
