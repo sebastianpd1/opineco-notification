@@ -39,26 +39,28 @@ function App() {
     return l;
   }, [q, offset, pestana]);
 
-  // Después de normalizar: si al grupo le quedan variaciones, la siguiente pasa a ser la ★;
-  // si no, se abre el siguiente modelo de la lista. La burbuja trae Deshacer unos segundos.
+  // Después de normalizar se pasa a la fila siguiente de la lista (la que estaba debajo de la que
+  // elegiste). Las otras variaciones del grupo aparecen cuando les toque su turno en la lista.
+  // La burbuja trae Deshacer unos segundos.
+  const fila = useRef(null);      // id de la fila de la lista en la que se hizo clic
+  const listaRef = useRef(lista);
+  listaRef.current = lista;
+  const abrir = (f) => { fila.current = f ? f.id : null; if (f) { setClave(f.clave); setPrincipal(f.texto); } else setClave(null); setVersion((x) => x + 1); };
+
   const despuesDeNormalizar = async (texto, claveAntes, principalAntes, grupo, accion) => {
-    mostrar({ texto, deshacer: { clave: claveAntes, principal: principalAntes, accion } }, 6000);
+    mostrar({ texto, deshacer: { clave: claveAntes, principal: principalAntes, accion, fila: fila.current } }, 6000);
+    const antes = listaRef.current.filas;
     const l = await cargar();
-    if (grupo.variaciones.length) {
-      const sigue = grupo.variaciones.find((v) => v.llave === principalAntes);
-      setPrincipal(sigue ? sigue.llave : grupo.variaciones[0].llave);
-      setVersion((x) => x + 1);
-    } else {
-      const sig = l.filas.find((f) => f.clave !== claveAntes);
-      if (sig) { setClave(sig.clave); setPrincipal(sig.texto); } else setClave(null);
-    }
+    const siguen = new Set(l.filas.map((f) => f.id));
+    const i = antes.findIndex((f) => f.id === fila.current);
+    abrir(antes.slice(i + 1).find((f) => siguen.has(f.id)) || l.filas[0]);
   };
 
   const deshacerDesdeBurbuja = async (info) => {
     setToast(null);
     try {
       const r = await api("/api/deshacer", { accion: info.accion });
-      setClave(info.clave); setPrincipal(info.principal); setVersion((x) => x + 1);
+      fila.current = info.fila; setClave(info.clave); setPrincipal(info.principal); setVersion((x) => x + 1);
       await cargar();
       avisar(r.mensaje);
     } catch (e) { avisar(e.message); }
@@ -120,7 +122,7 @@ function App() {
                 <tr key=${f.id} class=${f.clave === clave ? "activa" : ""}>
                   <td class="sku">${f.sku}</td>
                   <td>${f.texto}</td>
-                  <td><button class="primario" onClick=${() => { setClave(f.clave); setPrincipal(f.texto); }}>Verificar</button></td>
+                  <td><button class="primario" onClick=${() => abrir(f)}>Verificar</button></td>
                 </tr>`)}
             </tbody>
           </table>` : html`
@@ -307,7 +309,7 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
 
     <div>
       ${g.variaciones.length === 0 && html`<div class="vacio">Este grupo ya no tiene pendientes.</div>`}
-      ${g.variaciones.length > 0 && html`<div class="nota atajo">Teclado: ↑ ↓ eligen · → completa la elegida tal cual y pasa a la siguiente</div>`}
+      ${g.variaciones.length > 0 && html`<div class="nota atajo">Teclado: ↑ ↓ eligen · → completa la elegida tal cual y pasa a la siguiente de la lista</div>`}
       ${g.variaciones.map((v, i) => html`
         <div class=${"var" + (i === sel ? " sel" : "")} key=${v.llave} onClick=${() => setSel(i)}>
           <input type="checkbox" checked=${!!marcadas[v.llave]}

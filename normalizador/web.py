@@ -178,7 +178,9 @@ def lista(c, q, offset, limite, estado="PENDIENTE"):
     total = c.execute("select count(*) " + sql, args).fetchone()[0]
     filas = [dict(r) for r in c.execute(
         "select id, sku, texto, marca, clave, origen, nombre, como, fm_recid, fm_valor, fm_error " + sql +
-        " order by sku, texto limit ? offset ?",
+        # completados: lo último que hiciste arriba (por acción, la más nueva primero); los automáticos al final
+        (" order by accion is null, accion desc, sku, texto" if estado == "COMPLETADO" else " order by sku, texto") +
+        " limit ? offset ?",
         args + [limite, offset])]
     return {"total": total, "filas": filas}
 

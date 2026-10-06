@@ -31,9 +31,10 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
   pulsación = una acción: si dejas la tecla apretada no se repite.
 - Al normalizar, la burbuja de abajo dice exactamente qué se hizo (`“J4510” completado tal cual` o
   `“a”, “b” → normalizado como “X”`) y trae **Deshacer** unos segundos, que revierte **esa** acción.
-  Luego se pasa solo a lo siguiente: la próxima variación del grupo o, si el grupo quedó vacío, el
-  siguiente modelo de la lista.
-- **Deshacer** (arriba) revierte la última acción. En **Completados**, el botón **Reabrir** (primera
+  Luego se pasa solo a la fila siguiente de la lista (la que estaba debajo); las otras variaciones
+  del grupo aparecen cuando les toque su turno en la lista.
+- **Deshacer** (arriba) revierte la última acción. **Completados** muestra primero lo último que
+  hiciste (los automáticos van al final); el botón **Reabrir** (primera
   columna) devuelve a pendientes solo esa impresora. **Exportar CSV** deja
   `datos/salida/normalizados_web.csv`.
 
