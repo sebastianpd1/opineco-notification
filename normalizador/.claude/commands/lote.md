@@ -9,3 +9,7 @@ duda), `proponer`, y luego pide al subagente `verificador` que revise lo propues
 Si `siguiente-lote` responde `"tanda_completa": true`: pide al `verificador` que termine lo que quede
 propuesto, muestra `python3 norma.py tanda`, di "Tanda completa" y **detente** (si estás en `/loop`,
 termina el loop). No abras una tanda nueva: eso lo decide el usuario después de revisar el consumo.
+
+**Ritmo en `/loop`:** no hay nada externo que esperar entre lotes; en cuanto el verificador termine y
+la tanda no esté completa, programa el siguiente lote con la espera mínima (60 segundos). Nunca dejes
+esperas largas de 10-20 minutos.
