@@ -22,6 +22,7 @@ function App() {
   const [lista, setLista] = useState({ total: 0, filas: [] });
   const [pestana, setPestana] = useState("PENDIENTE");
   const [clave, setClave] = useState(null);
+  const [principal, setPrincipal] = useState(null);  // la impresora en la que se hizo clic
   const [toast, setToast] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -71,7 +72,7 @@ function App() {
                 <tr key=${f.id} class=${f.clave === clave ? "activa" : ""}>
                   <td class="sku">${f.sku}</td>
                   <td>${f.texto}</td>
-                  <td><button onClick=${() => setClave(f.clave)}>Verificar</button></td>
+                  <td><button onClick=${() => { setClave(f.clave); setPrincipal(f.texto); }}>Verificar</button></td>
                 </tr>`)}
             </tbody>
           </table>` : html`
@@ -101,7 +102,7 @@ function App() {
       </section>
       <section class="panel">
         ${clave
-          ? html`<${Grupo} clave=${clave} avisar=${avisar}
+          ? html`<${Grupo} clave=${clave} principal=${principal} avisar=${avisar}
                    alTerminar=${async (quedan) => {
                      await cargar();
                      if (!quedan) setClave(null);
@@ -113,7 +114,7 @@ function App() {
   `;
 }
 
-function Grupo({ clave, avisar, alTerminar }) {
+function Grupo({ clave, principal, avisar, alTerminar }) {
   const [g, setG] = useState(null);
   const [marcadas, setMarcadas] = useState({});
   const [nombre, setNombre] = useState("");
@@ -124,17 +125,19 @@ function Grupo({ clave, avisar, alTerminar }) {
 
   const cargarGrupo = useCallback(async () => {
     const d = await api(`/api/grupo?clave=${encodeURIComponent(clave)}`);
+    // La principal (la que se tocó en la lista) va primera.
+    d.variaciones.sort((a, b) => (b.llave === principal) - (a.llave === principal));
     setG(d);
     setMarcadas(Object.fromEntries(d.variaciones.map((v) => [v.llave, true])));
     return d;
-  }, [clave]);
+  }, [clave, principal]);
 
   useEffect(() => {
     setNombre(""); setGoogle(null); setError(""); setG(null);
     cargarGrupo().then((d) => {
       setConsulta(`${d.marca} ${d.variaciones[0]?.texto || ""} impresora`.trim());
     }).catch((e) => setError(e.message));
-  }, [clave, cargarGrupo]);
+  }, [clave, principal, cargarGrupo]);
 
   if (!g) return html`<div class="vacio">${error || "Cargando…"}</div>`;
 
@@ -147,7 +150,8 @@ function Grupo({ clave, avisar, alTerminar }) {
       const r = await api("/api/normalizar", { clave, llaves, nombre: valor, como });
       avisar(`${r.registros} registros normalizados como “${r.nombre}”`);
       const d = await cargarGrupo();
-      setNombre("");
+      setNombre(""); setGoogle(null);
+      setConsulta(`${d.marca} ${d.variaciones[0]?.texto || ""} impresora`.trim());
       await alTerminar(d.variaciones.length);
     } catch (e) { avisar(e.message); }
   };
@@ -210,9 +214,11 @@ function Grupo({ clave, avisar, alTerminar }) {
             title="Desmarca si esta variación es otra impresora"
             onChange=${(e) => setMarcadas({ ...marcadas, [v.llave]: e.target.checked })} />
           <div class="txt">
-            <span class="nombre">${v.texto}</span><span class="mas">+${v.cantidad}</span>
+            ${v.llave === principal && html`<span class="principal" title="La que estás verificando">★ </span>`}<span class="nombre">${v.texto}</span><span class="mas">+${v.cantidad}</span>
             <div class="skus">${v.skus.join(", ")}${v.total_skus > v.skus.length ? ` y ${v.total_skus - v.skus.length} más` : ""}${" · "}${v.origenes.join(", ").toLowerCase()}</div>
           </div>
+          <button title="Deja marcada solo esta variación (las otras quedan pendientes, juntas entre sí)"
+            onClick=${() => setMarcadas(Object.fromEntries(g.variaciones.map((x) => [x.llave, x.llave === v.llave])))}>Solo esta</button>
           <button title="Copiar al campo de arriba para corregirlo" onClick=${() => setNombre(v.texto)}>✎</button>
           <button class="verde" onClick=${() => normalizarComo(v.texto, "manual")}>Normalizar como este</button>
         </div>`)}
