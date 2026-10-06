@@ -53,6 +53,9 @@ Nunca abras una tanda tú.
   tóner distinto; igual `TASKalfa 2552ci`. Ahí conserva la parte de color (`2505AC`, `2552ci`,
   `MF632C`) y quita solo lo de accesorios. Si el mismo número existe solo en una versión (Brother
   `DCP-130C`: no hay DCP-130 mono), el base sin C también sirve; ante la duda, conserva la C.
+- **El 0,1%:** si estás seguro de que en un modelo el sufijo de accesorio sí importa (otra máquina u
+  otro consumible), agrega `"conservar_sufijo": true` y explica por qué en `nota`. Los modelos de
+  `excepciones-sufijo.txt` (lista que mantiene Opine Co) nunca pierden el sufijo.
 - `modelo` es el modelo base (`P1102`, `M251`, `2130`, `315`).
 - Formato del nombre: `Familia Modelo base`, **sin la marca** y sin sufijos de accesorios
   (`LaserJet Pro P1102`, `DeskJet 2130`, `HL-L2350`, `DCP-J100`). La marca va solo en el campo

@@ -121,10 +121,13 @@ def conectar():
     # (Corrige también nombres guardados antes de esta regla.)
     c.execute("update registros set nombre = trim(substr(nombre, length(marca) + 1))"
               " where marca is not null and marca != '' and upper(nombre) like upper(marca) || ' %'")
-    for (nombre,) in c.execute("select distinct nombre from registros where nombre is not null").fetchall():
-        base = sin_sufijo(nombre)
-        if base != nombre:
-            c.execute("update registros set nombre=? where nombre=?", (base, nombre))
+    # Una sola vez: nombres guardados antes de la regla de sufijos pasan al modelo base.
+    if not c.execute("select 1 from meta where k='migracion_sufijos'").fetchone():
+        for (nombre,) in c.execute("select distinct nombre from registros where nombre is not null").fetchall():
+            base = sin_sufijo(nombre)
+            if base != nombre:
+                c.execute("update registros set nombre=? where nombre=?", (base, nombre))
+        c.execute("insert into meta values('migracion_sufijos', '1')")
     c.commit()
     return c
 
@@ -144,8 +147,26 @@ SUFIJO_PEGADO = re.compile(r"(?<=\d)(?:[DNWFTXH]{1,4}|MFP)$", re.IGNORECASE)
 SUFIJO_SUELTO = re.compile(r"^(?:[DNWFTXH]{1,4}|MFP)$", re.IGNORECASE)
 
 
+# El 0,1%: modelos donde el sufijo SÍ importa. Un modelo por línea (como debe quedar el nombre), "#" comenta.
+ARCHIVO_EXCEPCIONES = BASE / "excepciones-sufijo.txt"
+
+
+def compacto(texto):
+    return re.sub(r"[^A-Z0-9]", "", (texto or "").upper())
+
+
+def excepciones_sufijo():
+    if not ARCHIVO_EXCEPCIONES.exists():
+        return set()
+    lineas = ARCHIVO_EXCEPCIONES.read_text(encoding="utf-8").splitlines()
+    return {compacto(l.split("#")[0]) for l in lineas if compacto(l.split("#")[0])}
+
+
 def sin_sufijo(nombre):
-    """'LaserJet Pro P1102w' → 'LaserJet Pro P1102'; 'HL-L2350DW' → 'HL-L2350'; 'M1132 MFP' → 'M1132'."""
+    """'LaserJet Pro P1102w' → 'LaserJet Pro P1102'; 'HL-L2350DW' → 'HL-L2350'; 'M1132 MFP' → 'M1132'.
+    No toca los modelos de excepciones-sufijo.txt."""
+    if any(compacto(nombre).endswith(e) for e in excepciones_sufijo()):
+        return nombre
     partes = (nombre or "").split()
     while len(partes) > 1 and SUFIJO_SUELTO.match(partes[-1]) and re.search(r"\d$", partes[-2]):
         partes.pop()
@@ -442,7 +463,11 @@ def cmd_proponer(a):
             resumen["sin_registros"].append(d.get("textos") or d.get("rids") or d.get("rid"))
             continue
         if d.get("nombre"):
-            d["nombre"] = sin_sufijo(sin_marca(d["nombre"], d.get("marca")))
+            d["nombre"] = sin_marca(d["nombre"], d.get("marca"))
+            if d.get("conservar_sufijo"):
+                d["nota"] = "[conserva sufijo] " + (d.get("nota") or "")
+            else:
+                d["nombre"] = sin_sufijo(d["nombre"])
         for rid in rids:
             fila = c.execute("select texto, estado from registros where rid=?", (rid,)).fetchone()
             if not fila or fila["estado"] != "PENDIENTE":

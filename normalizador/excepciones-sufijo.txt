@@ -1,0 +1,5 @@
+# Modelos donde el sufijo SÍ cambia la máquina o la compatibilidad (el 0,1%).
+# Uno por línea, escrito como debe quedar el nombre normalizado (sin la marca).
+# El normalizador nunca les quita el sufijo. Ejemplos (borra el # para activarlos):
+# e-STUDIO 2505AC
+# FS-1020MFP
