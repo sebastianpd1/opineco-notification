@@ -30,7 +30,7 @@ DATOS = BASE / "datos"
 DB = DATOS / "web.db"
 PAGINA = BASE / "web"
 PUERTO = 8765
-ALGORITMO = "literal-1"  # si cambia y no hay nada normalizado, los CSV se recargan solos al abrir
+ALGORITMO = "literal-2"  # si cambia y no hay nada normalizado, los CSV se recargan solos al abrir
 LOCK = threading.Lock()
 
 ESQUEMA = """
@@ -107,6 +107,8 @@ def importar(c):
     c.commit()
     total = c.execute("select count(*) from filas").fetchone()[0]
     print(f"Cargados {total} registros ({len(con_normalizada)} SKU desde la normalizada; el resto desde COMPATIBILITY).")
+    r = loop_automatico(c)
+    print(f"Completados solos (todas iguales): {r['grupos_completados']} grupos, {r['registros_completados']} registros.")
 
 
 # ------------------------------------------------------------------ lógica
@@ -122,9 +124,10 @@ def nueva_accion(c, tipo, detalle):
 
 
 def loop_automatico(c):
-    """Recorre los grupos (marca + números). Si todas las impresoras pendientes del grupo son iguales
-    (solo cambian espacios/saltos de línea), las completa con ese nombre y desaparecen de la lista."""
-    accion = nueva_accion(c, "loop", {})
+    """Corre solo al cargar los datos. Recorre los grupos (marca + números): si todas las impresoras del
+    grupo son idénticas (solo cambian espacios/saltos de línea), las completa con ese nombre ("auto")
+    y pasan a la pestaña Completados. No es una acción para Deshacer; se corrige con Reabrir."""
+    accion = None
     grupos = completados = filas = 0
     for (clave,) in c.execute("select distinct clave from filas where estado='PENDIENTE'").fetchall():
         grupos += 1
@@ -134,8 +137,6 @@ def loop_automatico(c):
             filas += c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
                                " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
             completados += 1
-    c.execute("update acciones set detalle=? where id=?",
-              (json.dumps({"grupos_completados": completados, "registros": filas}), accion))
     c.commit()
     return {"grupos_revisados": grupos, "grupos_completados": completados, "registros_completados": filas}
 
@@ -148,14 +149,14 @@ def resumen(c):
             "puede_deshacer": c.execute("select count(*) from acciones").fetchone()[0] > 0}
 
 
-def lista(c, q, offset, limite):
-    sql, args = "from filas where estado='PENDIENTE'", []
+def lista(c, q, offset, limite, estado="PENDIENTE"):
+    sql, args = "from filas where estado=?", [estado]
     if q:
-        sql += " and (sku like ? or texto like ?)"
-        args += [f"%{q}%", f"%{q}%"]
+        sql += " and (sku like ? or texto like ? or nombre like ?)"
+        args += [f"%{q}%", f"%{q}%", f"%{q}%"]
     total = c.execute("select count(*) " + sql, args).fetchone()[0]
     filas = [dict(r) for r in c.execute(
-        "select id, sku, texto, marca, clave, origen " + sql + " order by sku, texto limit ? offset ?",
+        "select id, sku, texto, marca, clave, origen, nombre, como " + sql + " order by sku, texto limit ? offset ?",
         args + [limite, offset])]
     return {"total": total, "filas": filas}
 
@@ -194,6 +195,14 @@ def normalizar(c, clave, llaves, nombre, como):
               (json.dumps({"clave": clave, "nombre": nombre, "registros": n}, ensure_ascii=False), accion))
     c.commit()
     return {"registros": n, "nombre": nombre}
+
+
+def reabrir(c, clave):
+    """Devuelve a pendientes todo lo completado de ese grupo, para corregirlo."""
+    n = c.execute("update filas set estado='PENDIENTE', nombre=null, como=null, accion=null"
+                  " where clave=? and estado='COMPLETADO'", (clave,)).rowcount
+    c.commit()
+    return {"mensaje": f"{n} registros vuelven a pendientes", "registros": n}
 
 
 def deshacer(c):
@@ -313,7 +322,9 @@ class Manejador(BaseHTTPRequestHandler):
                 if u.path == "/api/resumen":
                     return self.responder(resumen(c))
                 if u.path == "/api/filas":
-                    return self.responder(lista(c, p.get("q", ""), int(p.get("offset", 0)), int(p.get("limite", 100))))
+                    estado = "COMPLETADO" if p.get("estado") == "COMPLETADO" else "PENDIENTE"
+                    return self.responder(lista(c, p.get("q", ""), int(p.get("offset", 0)),
+                                                int(p.get("limite", 100)), estado))
                 if u.path == "/api/grupo":
                     return self.responder(grupo(c, p["clave"]))
             self.responder({"error": "no encontrado"}, 404)
@@ -330,8 +341,8 @@ class Manejador(BaseHTTPRequestHandler):
                     g = grupo(c, d["clave"])
                 return self.responder(verificar_en_google(g, d.get("consulta")))
             with LOCK:
-                if self.path == "/api/loop":
-                    return self.responder(loop_automatico(c))
+                if self.path == "/api/reabrir":
+                    return self.responder(reabrir(c, d["clave"]))
                 if self.path == "/api/normalizar":
                     return self.responder(normalizar(c, d["clave"], set(d["llaves"]), d["nombre"],
                                                      d.get("como", "manual")))

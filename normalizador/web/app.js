@@ -20,6 +20,7 @@ function App() {
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [lista, setLista] = useState({ total: 0, filas: [] });
+  const [pestana, setPestana] = useState("PENDIENTE");
   const [clave, setClave] = useState(null);
   const [toast, setToast] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -28,8 +29,8 @@ function App() {
 
   const cargar = useCallback(async () => {
     setResumen(await api("/api/resumen"));
-    setLista(await api(`/api/filas?q=${encodeURIComponent(q)}&offset=${offset}&limite=${POR_PAGINA}`));
-  }, [q, offset]);
+    setLista(await api(`/api/filas?estado=${pestana}&q=${encodeURIComponent(q)}&offset=${offset}&limite=${POR_PAGINA}`));
+  }, [q, offset, pestana]);
 
   useEffect(() => { cargar().catch((e) => avisar(e.message)); }, [cargar]);
 
@@ -47,10 +48,6 @@ function App() {
         <span class="stat">Pendientes <b>${resumen.pendientes.toLocaleString("es-CL")}</b></span>
         <span class="stat">Completados <b>${resumen.completados.toLocaleString("es-CL")}</b></span>
         <span class="stat">Grupos por revisar <b>${resumen.grupos_pendientes.toLocaleString("es-CL")}</b></span>`}
-      <button class="primario" disabled=${ocupado}
-        title="Completa solo los grupos donde todas las impresoras son iguales (solo cambian espacios o saltos de línea)"
-        onClick=${() => accion("/api/loop", (r) => `Loop: ${r.grupos_completados} grupos (${r.registros_completados} registros) completados y ocultados`)}>
-        Ejecutar loop</button>
       <button disabled=${ocupado || !resumen?.puede_deshacer}
         onClick=${() => accion("/api/deshacer", (r) => r.mensaje)}>Deshacer</button>
       <button disabled=${ocupado}
@@ -60,18 +57,42 @@ function App() {
     </header>
     <main>
       <section class="lista">
-        <table>
-          <thead><tr><th>SKU</th><th>Impresora</th><th></th></tr></thead>
-          <tbody>
-            ${lista.filas.map((f) => html`
-              <tr key=${f.id} class=${f.clave === clave ? "activa" : ""}>
-                <td class="sku">${f.sku}</td>
-                <td>${f.texto}</td>
-                <td><button onClick=${() => setClave(f.clave)}>Verificar</button></td>
-              </tr>`)}
-          </tbody>
-        </table>
-        ${lista.filas.length === 0 && html`<div class="vacio">No hay pendientes${q ? " con esa búsqueda" : ""}.</div>`}
+        <div class="pestanas">
+          ${[["PENDIENTE", "Pendientes", resumen?.pendientes], ["COMPLETADO", "Completados", resumen?.completados]].map(([k, t, n]) => html`
+            <button key=${k} class=${"pestana" + (pestana === k ? " activa" : "")}
+              onClick=${() => { setPestana(k); setOffset(0); }}>
+              ${t}${n !== undefined ? ` (${n.toLocaleString("es-CL")})` : ""}</button>`)}
+        </div>
+        ${pestana === "PENDIENTE" ? html`
+          <table>
+            <thead><tr><th>SKU</th><th>Impresora</th><th></th></tr></thead>
+            <tbody>
+              ${lista.filas.map((f) => html`
+                <tr key=${f.id} class=${f.clave === clave ? "activa" : ""}>
+                  <td class="sku">${f.sku}</td>
+                  <td>${f.texto}</td>
+                  <td><button onClick=${() => setClave(f.clave)}>Verificar</button></td>
+                </tr>`)}
+            </tbody>
+          </table>` : html`
+          <table>
+            <thead><tr><th>SKU</th><th>Impresora original</th><th>Normalizada como</th><th>Cómo</th><th></th></tr></thead>
+            <tbody>
+              ${lista.filas.map((f) => html`
+                <tr key=${f.id}>
+                  <td class="sku">${f.sku}</td>
+                  <td>${f.texto}</td>
+                  <td><b>${f.nombre}</b></td>
+                  <td class="nota">${{ auto: "automático", manual: "manual", google: "Google" }[f.como] || f.como}</td>
+                  <td><button title="El grupo vuelve a Pendientes para corregirlo"
+                    onClick=${async () => {
+                      try { const r = await api("/api/reabrir", { clave: f.clave }); avisar(r.mensaje); await cargar(); }
+                      catch (e) { avisar(e.message); }
+                    }}>Reabrir</button></td>
+                </tr>`)}
+            </tbody>
+          </table>`}
+        ${lista.filas.length === 0 && html`<div class="vacio">No hay ${pestana === "PENDIENTE" ? "pendientes" : "completados"}${q ? " con esa búsqueda" : ""}.</div>`}
         <div class="paginas">
           <button disabled=${offset === 0} onClick=${() => setOffset(Math.max(0, offset - POR_PAGINA))}>‹ Anteriores</button>
           <span>${lista.total ? `${offset + 1}–${Math.min(offset + POR_PAGINA, lista.total)} de ${lista.total.toLocaleString("es-CL")}` : ""}</span>

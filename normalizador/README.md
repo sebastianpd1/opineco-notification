@@ -18,8 +18,9 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
 `datos/respaldos/` (los últimos 20); `datos/` no está en git, así que un `git pull` nunca lo toca.
 
 - **Lista (izquierda):** SKU e impresora, ordenados por SKU. Solo muestra pendientes.
-- **Ejecutar loop:** agrupa por marca + números (`P1102` + HP → `HP · 1102`). Si todas las impresoras
-  del grupo son iguales (solo cambian espacios o saltos de línea), las completa y las oculta.
+- **Al cargar los datos** agrupa por marca del SKU (inventario) + números (`P1102` + HP → `HP · 1102`).
+  Los grupos donde todas las impresoras son idénticas (solo cambian espacios o saltos de línea) se
+  completan solos y pasan a la pestaña **Completados**, donde cada uno se puede **Reabrir**.
 - **Verificar:** muestra las variaciones del grupo con su cantidad (`P1102 +30`, `P 1102 +3`...).
   Cada una tiene casilla (desmarca las que son otra impresora) y **Normalizar como este**.
 - **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.
