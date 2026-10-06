@@ -4,7 +4,9 @@
 Uso:  python3 web.py            → abre http://127.0.0.1:8765 (o el siguiente puerto libre)
       python3 web.py --reimportar   → vuelve a cargar los CSV de datos/ (borra lo normalizado en la web)
 
-Lee datos/inventario.csv, datos/normalizada.csv y datos/compatibility.csv (los mismos de norma.py).
+Fuente de las listas: FileMaker por XML si existe datos/filemaker.env (cada fila con su record-id, y lo que
+normalizas se escribe en la tabla madre); si no, los CSV datos/inventario.csv, normalizada.csv y
+compatibility.csv.
 Regla: los SKU con filas en la normalizada usan esas; los SKU sin normalizada usan COMPATIBILITY.
 Grupos: marca del SKU según INVENTARIO + todos los números del texto. Cada registro es una fila tal cual;
 lo único que se limpia son espacios y saltos de línea sobrantes. No se adivina nada.
@@ -23,7 +25,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import norma  # reutiliza lectura de CSV, limpieza, marca y la búsqueda en Google
+import filemaker
+import norma  # reutiliza lectura de CSV y la búsqueda en Google
 
 BASE = Path(__file__).resolve().parent
 DATOS = BASE / "datos"
@@ -52,10 +55,25 @@ create table if not exists acciones(id integer primary key, fecha real, tipo tex
 
 def conectar():
     DATOS.mkdir(exist_ok=True)
-    c = sqlite3.connect(DB, check_same_thread=False)
+    c = sqlite3.connect(DB, check_same_thread=False, timeout=30)
     c.row_factory = sqlite3.Row
     c.executescript(ESQUEMA)
+    existentes = {r[1] for r in c.execute("pragma table_info(filas)")}
+    for col in ("fm_recid", "fm_valor", "fm_error"):  # FileMaker: record-id, último valor escrito, error
+        if col not in existentes:
+            c.execute(f"alter table filas add column {col} text")
+    c.commit()
     return c
+
+
+# Estado compartido con la página: FileMaker (salud) y la carga en curso.
+ESTADO = {"fm": {"ok": None, "detalle": "Revisando…", "fecha": None},
+          "carga": {"activa": False, "mensaje": "", "error": None}}
+
+# Qué valor debe tener FileMaker para cada fila: el nombre si lo normalizaste tú (manual o Google);
+# el texto original si antes se escribió y luego se deshizo/reabrió. Los automáticos no se envían.
+DESEADO = ("case when estado='COMPLETADO' and como in ('manual','google') then nombre "
+           "when fm_valor is not null then texto end")
 
 
 # ------------------------------------------------------------------ reglas (literales, sin adivinar)
@@ -132,7 +150,10 @@ def loop_automatico(c):
     for (clave,) in c.execute("select distinct clave from filas where estado='PENDIENTE'").fetchall():
         grupos += 1
         textos = [r[0] for r in c.execute("select texto from filas where clave=? and estado='PENDIENTE'", (clave,))]
-        if len({igual(t) for t in textos}) == 1:
+        # Si en el grupo ya normalizaste algo a mano, lo que dejaste pendiente (desmarcado) espera tu revisión.
+        tocado = c.execute("select 1 from filas where clave=? and estado='COMPLETADO' and como in ('manual','google')"
+                           " limit 1", (clave,)).fetchone()
+        if not tocado and len({igual(t) for t in textos}) == 1:
             nombre = max(set(textos), key=textos.count)
             filas += c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
                                " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
@@ -156,7 +177,8 @@ def lista(c, q, offset, limite, estado="PENDIENTE"):
         args += [f"%{q}%", f"%{q}%", f"%{q}%"]
     total = c.execute("select count(*) " + sql, args).fetchone()[0]
     filas = [dict(r) for r in c.execute(
-        "select id, sku, texto, marca, clave, origen, nombre, como " + sql + " order by sku, texto limit ? offset ?",
+        "select id, sku, texto, marca, clave, origen, nombre, como, fm_recid, fm_valor, fm_error " + sql +
+        " order by sku, texto limit ? offset ?",
         args + [limite, offset])]
     return {"total": total, "filas": filas}
 
@@ -229,6 +251,151 @@ def exportar(c):
         w.writerow([d[0] for d in cur.description])
         w.writerows(filas)
     return {"archivo": str(ruta), "registros": len(filas)}
+
+
+# ------------------------------------------------------------------ FileMaker: carga y envío
+
+def cargar_desde_filemaker(c):
+    """Trae las 3 tablas por XML (cada fila con su record-id) y reemplaza la lista CONSERVANDO el avance:
+    - filas que ya venían de FileMaker: se reconocen por record-id y quedan igual (estado, nombre, texto);
+    - lo normalizado a mano cuando la lista venía de CSV se traspasa por SKU + origen + texto.
+    Antes de tocar nada guarda un respaldo."""
+    cfg = filemaker.config()
+    carga = ESTADO["carga"]
+    carga.update(activa=True, error=None, mensaje="Conectando con FileMaker…")
+    try:
+        def progreso(layout, n, total):
+            carga["mensaje"] = f"Leyendo {layout}: {n:,} de {total:,}".replace(",", ".")
+        inv = filemaker.traer_todo(cfg["FM_LAYOUT_INVENTARIO"],
+                                   [cfg["FM_CAMPO_INVENTARIO_ITEM"], cfg["FM_CAMPO_INVENTARIO_MARCA"]], progreso)
+        norm = filemaker.traer_todo(cfg["FM_LAYOUT_NORMALIZADA"],
+                                    [cfg["FM_CAMPO_NORMALIZADA_SKU"], cfg["FM_CAMPO_NORMALIZADA_MARCA"],
+                                     cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"]], progreso)
+        comp = filemaker.traer_todo(cfg["FM_LAYOUT_COMPATIBILITY"],
+                                    [cfg["FM_CAMPO_COMPATIBILITY_ID"], cfg["FM_CAMPO_COMPATIBILITY_SKU"],
+                                     cfg["FM_CAMPO_COMPATIBILITY_MARCA"], cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"]],
+                                    progreso)
+        inventario = {r.get(cfg["FM_CAMPO_INVENTARIO_ITEM"], "").strip(): r.get(cfg["FM_CAMPO_INVENTARIO_MARCA"], "")
+                      for r in inv}
+        nuevas = []
+
+        def agregar(r, origen, campo_sku, campo_marca, campo_imp, fm_id=""):
+            sku = r.get(campo_sku, "").strip()
+            texto = sin_espacios_sobrantes(r.get(campo_imp, ""))
+            if not sku or not texto:
+                return
+            marca_tabla = r.get(campo_marca, "").strip()
+            marca = (inventario.get(sku) or marca_tabla or "SIN MARCA").strip().upper()
+            nuevas.append({"sku": sku, "origen": origen, "fm_id": fm_id, "marca_item": marca_tabla, "marca": marca,
+                           "texto": texto, "fm_recid": r["_recid"]})
+
+        for r in norm:
+            agregar(r, "NORMALIZADA", cfg["FM_CAMPO_NORMALIZADA_SKU"], cfg["FM_CAMPO_NORMALIZADA_MARCA"],
+                    cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"])
+        con_normalizada = {n["sku"] for n in nuevas}
+        for r in comp:
+            if r.get(cfg["FM_CAMPO_COMPATIBILITY_SKU"], "").strip() in con_normalizada:
+                continue
+            agregar(r, "COMPATIBILITY", cfg["FM_CAMPO_COMPATIBILITY_SKU"], cfg["FM_CAMPO_COMPATIBILITY_MARCA"],
+                    cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"], r.get(cfg["FM_CAMPO_COMPATIBILITY_ID"], ""))
+
+        carga["mensaje"] = "Guardando y conservando el avance…"
+        with LOCK:
+            respaldar("antes-de-cargar-filemaker")
+            viejas = [dict(v) for v in c.execute("select * from filas")]
+            por_recid = {(v["origen"], v["fm_recid"]): v for v in viejas if v["fm_recid"]}
+            sin_recid = {}
+            for v in viejas:
+                if not v["fm_recid"] and v["estado"] == "COMPLETADO" and v["como"] in ("manual", "google"):
+                    sin_recid.setdefault((v["sku"], v["origen"], v["texto"]), []).append(v)
+            c.execute("delete from filas")
+            for n in nuevas:
+                v = por_recid.get((n["origen"], n["fm_recid"]))
+                if v:  # ya conocido: se mantiene tal cual (su texto original, estado y lo enviado)
+                    datos = {k: v[k] for k in ("texto", "estado", "nombre", "como", "accion", "fm_valor", "fm_error")}
+                else:
+                    datos = {"texto": n["texto"], "estado": "PENDIENTE", "nombre": None, "como": None,
+                             "accion": None, "fm_valor": None, "fm_error": None}
+                    previos = sin_recid.get((n["sku"], n["origen"], n["texto"]))
+                    if previos:  # normalizado a mano cuando la lista venía de CSV
+                        p = previos.pop()
+                        datos.update(estado="COMPLETADO", nombre=p["nombre"], como=p["como"], accion=p["accion"])
+                c.execute("insert into filas(sku, origen, fm_id, marca_item, marca, texto, clave, estado, nombre, como,"
+                          " accion, fm_recid, fm_valor, fm_error) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (n["sku"], n["origen"], n["fm_id"], n["marca_item"], n["marca"], datos["texto"],
+                           clave(n["marca"], datos["texto"]), datos["estado"], datos["nombre"], datos["como"],
+                           datos["accion"], n["fm_recid"], datos["fm_valor"], datos["fm_error"]))
+            c.commit()
+            r = loop_automatico(c)
+        carga["mensaje"] = (f"Cargados {len(nuevas):,} registros desde FileMaker; "
+                            f"{r['grupos_completados']:,} grupos idénticos completados solos.").replace(",", ".")
+    except Exception as e:
+        carga["error"] = str(e)
+        carga["mensaje"] = "No se pudo cargar desde FileMaker (la lista anterior sigue igual)."
+    finally:
+        carga["activa"] = False
+
+
+def lanzar_carga(c):
+    if not ESTADO["carga"]["activa"]:
+        ESTADO["carga"]["activa"] = True
+        threading.Thread(target=cargar_desde_filemaker, args=(c,), daemon=True).start()
+
+
+class Sincronizador(threading.Thread):
+    """En segundo plano: revisa la salud de FileMaker y escribe lo normalizado en la tabla madre,
+    directo por record-id. Si FileMaker está caído, lo pendiente espera y se envía cuando vuelve."""
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.forzar = True
+
+    def run(self):
+        c = conectar()
+        ultimo = 0
+        cfg = filemaker.config()
+        destino = {"NORMALIZADA": (cfg["FM_LAYOUT_NORMALIZADA"], cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"]),
+                   "COMPATIBILITY": (cfg["FM_LAYOUT_COMPATIBILITY"], cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"])}
+        while True:
+            espera = 60 if ESTADO["fm"].get("ok") else 20
+            if self.forzar or time.time() - ultimo > espera:
+                ESTADO["fm"] = filemaker.estado()
+                ultimo, self.forzar = time.time(), False
+            trabajo = False
+            if ESTADO["fm"].get("ok") and not ESTADO["carga"]["activa"]:
+                with LOCK:
+                    filas = c.execute(f"select id, origen, fm_recid, {DESEADO} as quiere from filas"
+                                      f" where fm_recid is not null and fm_error is null and {DESEADO} is not null"
+                                      f" and (fm_valor is null or fm_valor != {DESEADO}) limit 25").fetchall()
+                for f in filas:
+                    trabajo = True
+                    layout, campo = destino[f["origen"]]
+                    try:
+                        filemaker.editar(layout, f["fm_recid"], campo, f["quiere"])
+                        with LOCK:
+                            c.execute("update filas set fm_valor=?, fm_error=null where id=?", (f["quiere"], f["id"]))
+                            c.commit()
+                    except filemaker.FMCaido as e:
+                        ESTADO["fm"] = {"ok": False, "detalle": str(e), "fecha": time.time()}
+                        ultimo = time.time()
+                        break
+                    except Exception as e:
+                        with LOCK:
+                            c.execute("update filas set fm_error=? where id=?", (str(e), f["id"]))
+                            c.commit()
+            time.sleep(0.3 if trabajo else 3)
+
+
+SINCRONIZADOR = Sincronizador()
+
+
+def estado_filemaker(c):
+    por_enviar = c.execute(f"select count(*) from filas where fm_recid is not null and fm_error is null"
+                           f" and {DESEADO} is not null and (fm_valor is null or fm_valor != {DESEADO})").fetchone()[0]
+    errores = c.execute("select count(*) from filas where fm_error is not null").fetchone()[0]
+    sin_fm = c.execute("select count(*) from filas where fm_recid is null and estado='COMPLETADO'"
+                       " and como in ('manual','google')").fetchone()[0]
+    return {**ESTADO["fm"], "configurado": filemaker.configurado(), "carga": ESTADO["carga"],
+            "por_enviar": por_enviar, "errores": errores, "sin_filemaker": sin_fm}
 
 
 # ------------------------------------------------------------------ Google + agente
@@ -327,6 +494,8 @@ class Manejador(BaseHTTPRequestHandler):
                                                 int(p.get("limite", 100)), estado))
                 if u.path == "/api/grupo":
                     return self.responder(grupo(c, p["clave"]))
+                if u.path == "/api/fm":
+                    return self.responder(estado_filemaker(c))
             self.responder({"error": "no encontrado"}, 404)
         except Exception as e:  # el error se muestra en la página
             self.responder({"error": str(e)}, 500)
@@ -340,7 +509,17 @@ class Manejador(BaseHTTPRequestHandler):
                 with LOCK:
                     g = grupo(c, d["clave"])
                 return self.responder(verificar_en_google(g, d.get("consulta")))
+            if self.path == "/api/fm/recargar":
+                if not filemaker.configurado():
+                    raise ValueError("Primero configura datos/filemaker.env.")
+                lanzar_carga(c)
+                return self.responder({"mensaje": "Cargando desde FileMaker…"})
             with LOCK:
+                if self.path == "/api/fm/reintentar":
+                    n = c.execute("update filas set fm_error=null where fm_error is not null").rowcount
+                    c.commit()
+                    SINCRONIZADOR.forzar = True
+                    return self.responder({"mensaje": f"Reintentando {n} envíos a FileMaker"})
                 if self.path == "/api/reabrir":
                     return self.responder(reabrir(c, d["clave"]))
                 if self.path == "/api/normalizar":
@@ -404,9 +583,16 @@ def main():
         if r.strip().upper() != "SI":
             sys.exit("Cancelado: no se recargó nada.")
         print("Respaldo:", respaldar("antes-de-reimportar"))
-    if "--reimportar" in sys.argv or vacio or (version is None or version[0] != ALGORITMO) and hechos == 0:
+    desde_fm = filemaker.configurado()
+    sin_recid = not c.execute("select count(*) from filas where fm_recid is not null").fetchone()[0]
+    if desde_fm and (vacio or sin_recid or "--reimportar" in sys.argv
+                     or version is None or version[0] != ALGORITMO):
+        print("Las listas se cargan desde FileMaker (en segundo plano; el avance se conserva).")
+        lanzar_carga(c)
+    elif not desde_fm and ("--reimportar" in sys.argv or vacio
+                           or (version is None or version[0] != ALGORITMO) and hechos == 0):
         importar(c)
-    elif version is None or version[0] != ALGORITMO:
+    elif not desde_fm and (version is None or version[0] != ALGORITMO):
         print("Aviso: cambió el algoritmo, pero ya hay registros normalizados; no recargo para no perderlos.")
     c.execute("insert or replace into meta values('algoritmo', ?)", (ALGORITMO,))
     c.commit()
@@ -422,6 +608,7 @@ def main():
     if not servidor:
         sys.exit(f"No hay puertos libres entre {PUERTO} y {PUERTO + 19}.")
     servidor.c = c
+    SINCRONIZADOR.start()
     url = f"http://127.0.0.1:{puerto}"  # 127.0.0.1 y no "localhost": así nunca cae en otra app
     print(f"Normalizador web en {url}  (Control+C para cerrar)")
     if "--sin-navegador" not in sys.argv:

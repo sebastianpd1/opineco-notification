@@ -28,6 +28,22 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
   encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.
 - **Deshacer** revierte la última acción. **Exportar CSV** deja `datos/salida/normalizados_web.csv`.
 
+### Conectado a FileMaker (recomendado)
+
+Con `datos/filemaker.env` configurado (copiar `filemaker.env.ejemplo` y completar servidor, usuario y
+clave de una cuenta con XML Web Publishing), las listas se leen **directo de FileMaker por XML** y no
+hacen falta los CSV:
+
+- Cada fila trae su `record-id`, y al normalizar (manual o Google) se edita el mismo campo en la tabla
+  madre: `COMPATIBILIDADNORMALIZADA::Impresora` o `COMPATIBILITY::Printer`. Los automáticos no se envían.
+- **Indicador ● FileMaker:** verde si responde 200 **con** datos de FileMaker; rojo si no responde o
+  responde vacío (200 sin nada). Se revisa cada minuto (cada 20 s si está caído).
+- Si FileMaker está caído, lo normalizado queda **Por enviar** y se manda solo cuando vuelve.
+  **Deshacer** y **Reabrir** restauran en FileMaker el texto original.
+- **Recargar desde FileMaker** trae registros nuevos conservando todo el avance (se reconoce cada
+  fila por su record-id; antes se guarda un respaldo). La primera vez traspasa lo normalizado con CSV.
+- En **Completados**, la columna FileMaker muestra ✓ escrito, ⏳ por enviar o ⚠ error (con Reintentar).
+
 ## Flujo automático por lotes (norma.py)
 
 Recorre las compatibilidades de cada SKU en FileMaker y deja cada impresora con un nombre normalizado, con

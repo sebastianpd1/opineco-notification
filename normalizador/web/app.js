@@ -27,6 +27,7 @@ function App() {
   const [ocupado, setOcupado] = useState(false);
 
   const avisar = (m) => { setToast(m); setTimeout(() => setToast(""), 3500); };
+  const [fm, setFm] = useState(null);
 
   const cargar = useCallback(async () => {
     setResumen(await api("/api/resumen"));
@@ -34,6 +35,22 @@ function App() {
   }, [q, offset, pestana]);
 
   useEffect(() => { cargar().catch((e) => avisar(e.message)); }, [cargar]);
+
+  // Estado de FileMaker cada 5 s; si termina una carga, se refresca la lista.
+  useEffect(() => {
+    let cargando = false;
+    const revisar = async () => {
+      try {
+        const e = await api("/api/fm");
+        if (cargando && !e.carga.activa) { cargar(); if (e.carga.error) avisar(e.carga.error); }
+        cargando = e.carga.activa;
+        setFm(e);
+      } catch (_) { setFm({ ok: false, detalle: "La página perdió contacto con el programa", carga: {} }); }
+    };
+    revisar();
+    const t = setInterval(revisar, 5000);
+    return () => clearInterval(t);
+  }, [cargar]);
 
   const accion = async (ruta, mensaje) => {
     setOcupado(true);
@@ -49,6 +66,7 @@ function App() {
         <span class="stat">Pendientes <b>${resumen.pendientes.toLocaleString("es-CL")}</b></span>
         <span class="stat">Completados <b>${resumen.completados.toLocaleString("es-CL")}</b></span>
         <span class="stat">Grupos por revisar <b>${resumen.grupos_pendientes.toLocaleString("es-CL")}</b></span>`}
+      <${EstadoFM} fm=${fm} avisar=${avisar} />
       <button disabled=${ocupado || !resumen?.puede_deshacer}
         onClick=${() => accion("/api/deshacer", (r) => r.mensaje)}>Deshacer</button>
       <button disabled=${ocupado}
@@ -77,7 +95,7 @@ function App() {
             </tbody>
           </table>` : html`
           <table>
-            <thead><tr><th>SKU</th><th>Impresora original</th><th>Normalizada como</th><th>Cómo</th><th></th></tr></thead>
+            <thead><tr><th>SKU</th><th>Impresora original</th><th>Normalizada como</th><th>Cómo</th><th>FileMaker</th><th></th></tr></thead>
             <tbody>
               ${lista.filas.map((f) => html`
                 <tr key=${f.id}>
@@ -85,6 +103,7 @@ function App() {
                   <td>${f.texto}</td>
                   <td><b>${f.nombre}</b></td>
                   <td class="nota">${{ auto: "automático", manual: "manual", google: "Google" }[f.como] || f.como}</td>
+                  <td class="nota">${envioFM(f)}</td>
                   <td><button title="El grupo vuelve a Pendientes para corregirlo"
                     onClick=${async () => {
                       try { const r = await api("/api/reabrir", { clave: f.clave }); avisar(r.mensaje); await cargar(); }
@@ -111,6 +130,30 @@ function App() {
       </section>
     </main>
     ${toast && html`<div class="toast">${toast}</div>`}
+  `;
+}
+
+function envioFM(f) {
+  if (f.como === "auto") return "—";
+  if (!f.fm_recid) return html`<span title="Esta lista vino de CSV: recárgala desde FileMaker">sin FileMaker</span>`;
+  if (f.fm_error) return html`<span class="error" title=${f.fm_error}>⚠ error</span>`;
+  return f.fm_valor === f.nombre ? html`<span class="ok">✓ escrito</span>` : "⏳ por enviar";
+}
+
+function EstadoFM({ fm, avisar }) {
+  if (!fm) return null;
+  const post = async (ruta) => { try { avisar((await api(ruta, {})).mensaje); } catch (e) { avisar(e.message); } };
+  const color = fm.ok === true ? "verde" : fm.ok === false ? "rojo" : "gris";
+  const texto = fm.ok === true ? "FileMaker OK" : fm.ok === false ? "FileMaker sin respuesta" : "FileMaker sin configurar";
+  return html`
+    <span class=${"fm " + color} title=${fm.detalle || ""}>● ${texto}</span>
+    ${fm.carga?.activa
+      ? html`<span class="stat">${fm.carga.mensaje}</span>`
+      : fm.configurado && html`<button disabled=${!fm.ok} title="Trae lo nuevo de FileMaker; lo ya normalizado se conserva"
+          onClick=${() => post("/api/fm/recargar")}>Recargar desde FileMaker</button>`}
+    ${fm.por_enviar > 0 && html`<span class="stat">Por enviar <b>${fm.por_enviar}</b></span>`}
+    ${fm.errores > 0 && html`<button class="error" title="Envíos que FileMaker rechazó" onClick=${() => post("/api/fm/reintentar")}>
+        ⚠ ${fm.errores} con error · Reintentar</button>`}
   `;
 }
 
