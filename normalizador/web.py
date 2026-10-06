@@ -364,12 +364,35 @@ def puerto_ocupado(puerto):
     return False
 
 
+def respaldar(motivo):
+    """Copia datos/web.db a datos/respaldos/ (se guardan los últimos 20). El avance nunca se pierde."""
+    if not DB.exists():
+        return None
+    carpeta = DATOS / "respaldos"
+    carpeta.mkdir(exist_ok=True)
+    destino = carpeta / f"web-{time.strftime('%Y%m%d-%H%M%S')}-{motivo}.db"
+    origen = sqlite3.connect(DB)
+    with sqlite3.connect(destino) as copia:
+        origen.backup(copia)  # copia consistente aunque la base esté en uso
+    origen.close()
+    for viejo in sorted(carpeta.glob("web-*.db"))[:-20]:
+        viejo.unlink()
+    return destino
+
+
 def main():
+    respaldar("al-abrir")
     c = conectar()
     c.execute("create table if not exists meta(k text primary key, v text)")
     version = c.execute("select v from meta where k='algoritmo'").fetchone()
     hechos = c.execute("select count(*) from filas where estado='COMPLETADO'").fetchone()[0]
     vacio = not c.execute("select count(*) from filas").fetchone()[0]
+    if "--reimportar" in sys.argv and hechos:
+        r = input(f"Hay {hechos} registros normalizados. Recargar los CSV los BORRA de la web "
+                  f"(queda un respaldo en datos/respaldos/). Escribe SI para continuar: ")
+        if r.strip().upper() != "SI":
+            sys.exit("Cancelado: no se recargó nada.")
+        print("Respaldo:", respaldar("antes-de-reimportar"))
     if "--reimportar" in sys.argv or vacio or (version is None or version[0] != ALGORITMO) and hechos == 0:
         importar(c)
     elif version is None or version[0] != ALGORITMO:

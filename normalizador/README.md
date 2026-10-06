@@ -13,8 +13,9 @@ O con doble clic en **Normalizador** del Escritorio. Para crear ese ícono (una 
 `cp ~/opineco-notification/normalizador/Normalizador.command ~/Desktop/`
 
 Se abre http://127.0.0.1:8765, o el siguiente puerto libre que diga la Terminal (Control+C en la Terminal para cerrarla). Usa los mismos 3 CSV de
-`datos/`. La primera vez los carga solos; `python3 web.py --reimportar` los vuelve a cargar
-(borra lo normalizado en la web).
+`datos/`. La primera vez los carga solos; `python3 web.py --reimportar` los vuelve a cargar (si ya
+hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo del avance en
+`datos/respaldos/` (los últimos 20); `datos/` no está en git, así que un `git pull` nunca lo toca.
 
 - **Lista (izquierda):** SKU e impresora, ordenados por SKU. Solo muestra pendientes.
 - **Ejecutar loop:** agrupa por marca + números (`P1102` + HP → `HP · 1102`). Si todas las impresoras
