@@ -230,7 +230,8 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
       const texto = r.tal_cual
         ? `“${r.nombre}” completado tal cual (${r.registros} registros)`
         : `${r.textos.map((t) => `“${t}”`).join(", ")} → normalizado como “${r.nombre}” (${r.registros} registros)`;
-      await alNormalizar(texto, clave, principal, d, r.accion);
+      const extra = r.extra ? ` · “${r.extra_texto}” quedaba sola y se completó tal cual (${r.extra})` : "";
+      await alNormalizar(texto + extra, clave, principal, d, r.accion);
     } catch (e) { avisar(e.message); }
     // pausa corta: una pulsación = una acción, aunque la tecla rebote o quede apretada
     setTimeout(() => { enviando.current = false; }, 600);

@@ -21,6 +21,9 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
 - **Al cargar los datos** agrupa por marca del SKU (inventario) + números (`P1102` + HP → `HP · 1102`).
   Los grupos donde todas las impresoras son idénticas (solo cambian espacios o saltos de línea) se
   completan solos y pasan a la pestaña **Completados**, donde cada uno se puede **Reabrir**.
+  Lo mismo cuando normalizas parte de un grupo y lo que queda pendiente es una sola variación: se
+  completa tal cual en la misma acción (la burbuja lo dice y **Deshacer** revierte ambas). Lo que
+  reabres no se vuelve a completar solo.
 - **Verificar:** muestra las variaciones del grupo con su cantidad (`P1102 +30`, `P 1102 +3`...).
   Cada una tiene casilla (desmarca las que son otra impresora) y **Normalizar como este**.
 - **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.

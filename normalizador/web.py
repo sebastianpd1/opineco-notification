@@ -141,22 +141,32 @@ def nueva_accion(c, tipo, detalle):
                      (time.time(), tipo, json.dumps(detalle, ensure_ascii=False))).lastrowid
 
 
+def completar_si_queda_una(c, clave, accion=None):
+    """Si lo pendiente del grupo es una sola variación (todas idénticas salvo espacios/saltos), la completa
+    tal cual ("auto"). No toca lo que reabriste a mano. Devuelve (registros, texto)."""
+    textos = [r[0] for r in c.execute("select texto from filas where clave=? and estado='PENDIENTE'", (clave,))]
+    if not textos or len({igual(t) for t in textos}) != 1:
+        return 0, None
+    if c.execute("select 1 from filas where clave=? and estado='PENDIENTE' and como='reabierto' limit 1",
+                 (clave,)).fetchone():
+        return 0, None
+    nombre = max(set(textos), key=textos.count)
+    n = c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
+                  " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
+    return n, nombre
+
+
 def loop_automatico(c):
-    """Corre solo al cargar los datos. Recorre los grupos (marca + números): si todas las impresoras del
-    grupo son idénticas (solo cambian espacios/saltos de línea), las completa con ese nombre ("auto")
-    y pasan a la pestaña Completados. No es una acción para Deshacer; se corrige con Reabrir."""
-    accion = None
+    """Corre al cargar los datos y al abrir. Recorre los grupos (marca + números): si lo pendiente del grupo
+    es una sola variación (solo cambian espacios/saltos de línea), la completa con ese nombre ("auto") y
+    pasa a la pestaña Completados. No es una acción para Deshacer; se corrige con Reabrir (y lo
+    reabierto no se vuelve a completar solo)."""
     grupos = completados = filas = 0
     for (clave,) in c.execute("select distinct clave from filas where estado='PENDIENTE'").fetchall():
         grupos += 1
-        textos = [r[0] for r in c.execute("select texto from filas where clave=? and estado='PENDIENTE'", (clave,))]
-        # Si en el grupo ya normalizaste algo a mano, lo que dejaste pendiente (desmarcado) espera tu revisión.
-        tocado = c.execute("select 1 from filas where clave=? and estado='COMPLETADO' and como in ('manual','google')"
-                           " limit 1", (clave,)).fetchone()
-        if not tocado and len({igual(t) for t in textos}) == 1:
-            nombre = max(set(textos), key=textos.count)
-            filas += c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
-                               " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
+        n, _ = completar_si_queda_una(c, clave)
+        if n:
+            filas += n
             completados += 1
     c.commit()
     return {"grupos_revisados": grupos, "grupos_completados": completados, "registros_completados": filas}
@@ -216,17 +226,20 @@ def normalizar(c, clave, llaves, nombre, como):
             n += c.execute("update filas set estado='COMPLETADO', nombre=?, como=?, accion=? where id=?",
                            (nombre, como, accion, r["id"])).rowcount
             textos.add(r["texto"])
+    # si en el grupo queda una sola variación idéntica, se completa sola en la misma acción (Deshacer revierte ambas)
+    extra, extra_texto = completar_si_queda_una(c, clave, accion)
     c.execute("update acciones set detalle=? where id=?",
               (json.dumps({"clave": clave, "nombre": nombre, "registros": n}, ensure_ascii=False), accion))
     c.commit()
     # tal_cual: se completó con su mismo texto (no se cambió el nombre)
     return {"registros": n, "nombre": nombre, "accion": accion, "tal_cual": textos == {nombre},
-            "textos": sorted(textos)}
+            "textos": sorted(textos), "extra": extra, "extra_texto": extra_texto}
 
 
 def reabrir(c, clave, texto=None):
     """Devuelve a pendientes lo completado de esa impresora (clave + texto); sin texto, todo el grupo."""
-    sql, args = "update filas set estado='PENDIENTE', nombre=null, como=null, accion=null" \
+    # como='reabierto': el loop automático no lo vuelve a completar solo
+    sql, args = "update filas set estado='PENDIENTE', nombre=null, como='reabierto', accion=null" \
                 " where clave=? and estado='COMPLETADO'", [clave]
     if texto is not None:
         sql += " and texto=?"
@@ -603,12 +616,17 @@ def main():
     if desde_fm and (vacio or sin_recid or "--reimportar" in sys.argv
                      or version is None or version[0] != ALGORITMO):
         print("Las listas se cargan desde FileMaker (en segundo plano; el avance se conserva).")
-        lanzar_carga(c)
+        lanzar_carga(c)  # al terminar corre el loop automático
     elif not desde_fm and ("--reimportar" in sys.argv or vacio
                            or (version is None or version[0] != ALGORITMO) and hechos == 0):
         importar(c)
     elif not desde_fm and (version is None or version[0] != ALGORITMO):
         print("Aviso: cambió el algoritmo, pero ya hay registros normalizados; no recargo para no perderlos.")
+    if not ESTADO["carga"].get("activa"):
+        r = loop_automatico(c)
+        if r["registros_completados"]:
+            print(f"Completados solos (queda una sola variación): {r['grupos_completados']} grupos, "
+                  f"{r['registros_completados']} registros.")
     c.execute("insert or replace into meta values('algoritmo', ?)", (ALGORITMO,))
     c.commit()
     servidor = None
