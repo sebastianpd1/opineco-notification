@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Normalizador de impresoras</title>
+<style>
+  :root { --borde:#d9dde3; --suave:#f5f7fa; --texto:#1d2330; --gris:#6b7280; --azul:#1f6feb; --verde:#1a7f37; --rojo:#cf222e; --amarillo:#fff8c5; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:var(--texto); background:#fff; font-size:14px; }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--borde); position:sticky; top:0; background:#fff; z-index:2; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 8px 0 0; }
+  .stat { color:var(--gris); }
+  .stat b { color:var(--texto); }
+  button { font:inherit; border:1px solid var(--borde); background:#fff; border-radius:6px; padding:5px 10px; cursor:pointer; }
+  button:hover { background:var(--suave); }
+  button.primario { background:var(--azul); border-color:var(--azul); color:#fff; }
+  button.primario:hover { filter:brightness(.95); }
+  button.verde { background:var(--verde); border-color:var(--verde); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=text] { font:inherit; border:1px solid var(--borde); border-radius:6px; padding:6px 8px; }
+  main { display:grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 46%); height: calc(100vh - 56px); }
+  .lista { overflow:auto; border-right:1px solid var(--borde); }
+  table { border-collapse:collapse; width:100%; }
+  th { text-align:left; position:sticky; top:0; background:var(--suave); padding:6px 10px; border-bottom:1px solid var(--borde); font-weight:600; }
+  td { padding:5px 10px; border-bottom:1px solid #eef0f3; vertical-align:middle; }
+  tr.activa td { background:#eaf2ff; }
+  td.sku { font-family: ui-monospace, Menlo, monospace; font-size:12px; white-space:nowrap; }
+  .paginas { display:flex; gap:8px; align-items:center; padding:8px 10px; color:var(--gris); }
+  .panel { overflow:auto; padding:14px 16px; }
+  .panel h2 { margin:0 0 10px; font-size:17px; }
+  .caja { border:1px solid var(--borde); border-radius:8px; padding:10px; margin-bottom:12px; background:var(--suave); }
+  .fila-edit { display:flex; gap:8px; }
+  .fila-edit input { flex:1; font-size:15px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { border:1px solid var(--borde); background:#fff; border-radius:14px; padding:3px 10px; cursor:pointer; }
+  .chip.ok { border-color:var(--verde); color:var(--verde); }
+  .chip.dudoso { border-color:#d4a72c; background:var(--amarillo); }
+  .var { display:flex; align-items:center; gap:8px; padding:7px 4px; border-bottom:1px solid #eef0f3; }
+  .var .txt { flex:1; min-width:0; }
+  .var .nombre { font-weight:600; white-space:pre-wrap; }
+  .var .mas { color:var(--gris); font-size:12px; margin-left:6px; }
+  .var .skus { color:var(--gris); font-size:11px; }
+  .nota { color:var(--gris); font-size:12px; }
+  .error { color:var(--rojo); }
+  .resultados { font-size:12px; color:var(--gris); margin:6px 0 0; padding-left:18px; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1d2330; color:#fff; padding:8px 14px; border-radius:8px; z-index:5; }
+  .vacio { color:var(--gris); padding:30px 10px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="/vendor/react.production.min.js"></script>
+<script src="/vendor/react-dom.production.min.js"></script>
+<script src="/vendor/htm.umd.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

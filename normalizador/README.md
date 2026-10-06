@@ -1,5 +1,30 @@
 # Normalizador de impresoras
 
+## Normalizador web (recomendado)
+
+Página para normalizar a mano, grupo por grupo, con ayuda de Google:
+
+```
+cd ~/opineco-notification/normalizador
+python3 web.py
+```
+
+Se abre http://localhost:8765 (Control+C en la Terminal para cerrarla). Usa los mismos 3 CSV de
+`datos/`. La primera vez los carga solos; `python3 web.py --reimportar` los vuelve a cargar
+(borra lo normalizado en la web).
+
+- **Lista (izquierda):** SKU e impresora, ordenados por SKU. Solo muestra pendientes.
+- **Ejecutar loop:** agrupa por marca + números (`P1102` + HP → `HP · 1102`). Si todas las impresoras
+  del grupo son iguales (solo cambian espacios o saltos de línea), las completa y las oculta.
+- **Verificar:** muestra las variaciones del grupo con su cantidad (`P1102 +30`, `P 1102 +3`...).
+  Cada una tiene casilla (desmarca las que son otra impresora) y **Normalizar como este**.
+- **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.
+- **Buscar y verificar en Google:** busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
+  encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.
+- **Deshacer** revierte la última acción. **Exportar CSV** deja `datos/salida/normalizados_web.csv`.
+
+## Flujo automático por lotes (norma.py)
+
 Recorre las compatibilidades de cada SKU en FileMaker y deja cada impresora con un nombre normalizado, con
 el flujo de dos "empleados" hecho con Claude Code en tu Mac (usa tu suscripción, no la API):
 
