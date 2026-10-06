@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Normalizador web — página para normalizar impresoras a mano, grupo por grupo.
 
-Uso:  python3 web.py            → abre http://localhost:8765
+Uso:  python3 web.py            → abre http://127.0.0.1:8765 (o el siguiente puerto libre)
       python3 web.py --reimportar   → vuelve a cargar los CSV de datos/ (borra lo normalizado en la web)
 
 Lee datos/inventario.csv, datos/normalizada.csv y datos/compatibility.csv (los mismos de norma.py).
@@ -327,21 +327,41 @@ class Manejador(BaseHTTPRequestHandler):
             self.responder({"error": str(e)}, 500)
 
 
+class Servidor(ThreadingHTTPServer):
+    allow_reuse_address = False  # en Mac, reusar la dirección deja "compartir" el puerto con otra app
+
+
+def puerto_ocupado(puerto):
+    """True si ya hay algo escuchando en ese puerto (IPv4 o IPv6), aunque sea otra aplicación."""
+    import socket
+    for familia, direccion in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(familia, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                if s.connect_ex((direccion, puerto)) == 0:
+                    return True
+        except OSError:
+            pass
+    return False
+
+
 def main():
     c = conectar()
     if "--reimportar" in sys.argv or not c.execute("select count(*) from filas").fetchone()[0]:
         importar(c)
     servidor = None
     for puerto in range(PUERTO, PUERTO + 20):  # si el puerto está ocupado (otra app), usa el siguiente libre
+        if puerto_ocupado(puerto):
+            continue
         try:
-            servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+            servidor = Servidor(("127.0.0.1", puerto), Manejador)
             break
         except OSError:
             continue
     if not servidor:
         sys.exit(f"No hay puertos libres entre {PUERTO} y {PUERTO + 19}.")
     servidor.c = c
-    url = f"http://localhost:{puerto}"
+    url = f"http://127.0.0.1:{puerto}"  # 127.0.0.1 y no "localhost": así nunca cae en otra app
     print(f"Normalizador web en {url}  (Control+C para cerrar)")
     if "--sin-navegador" not in sys.argv:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
