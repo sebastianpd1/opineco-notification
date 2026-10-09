@@ -26,8 +26,11 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
   reabres no se vuelve a completar solo.
 - **Verificar:** muestra las variaciones del grupo con su cantidad (`P1102 +30`, `P 1102 +3`...).
   Cada una tiene casilla (desmarca las que son otra impresora) y **Normalizar como este**.
+- **Editar grupo** (en cada línea): corriges el texto ahí mismo (Enter guarda, Esc cancela) y se
+  guarda en todos los registros de esa línea (`DesignJet 730 +7` → los 7). Te quedas en el modelo
+  que estabas verificando.
 - **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.
-- **Buscar y verificar en Google:** busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
+- **Buscar y verificar en Google:** la búsqueda viene como `MARCA números impresora` (`HP 730 impresora`); busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
   encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.
 - **Teclado:** ↑ ↓ eligen una variación del grupo; **→** la completa tal cual (como "Solo esta" +
   "Normalizar como este") y pasa a la siguiente. No actúa mientras escribes en un campo. Una

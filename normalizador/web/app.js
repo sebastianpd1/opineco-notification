@@ -53,7 +53,9 @@ function App() {
     const l = await cargar();
     const siguen = new Set(l.filas.map((f) => f.id));
     const i = antes.findIndex((f) => f.id === fila.current);
-    abrir(antes.slice(i + 1).find((f) => siguen.has(f.id)) || l.filas[0]);
+    // si la fila en la que estabas sigue pendiente (corregiste otra línea del grupo), te quedas en ella
+    if (i >= 0 && siguen.has(fila.current)) abrir(antes[i]);
+    else abrir(antes.slice(i + 1).find((f) => siguen.has(f.id)) || l.filas[0]);
   };
 
   const deshacerDesdeBurbuja = async (info) => {
@@ -193,6 +195,7 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
   const [marcadas, setMarcadas] = useState({});
   const [nombre, setNombre] = useState("");
   const [consulta, setConsulta] = useState("");
+  const [editando, setEditando] = useState(null);  // { llave, valor }: variación que corriges en su línea
   const [google, setGoogle] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState("");
@@ -209,9 +212,9 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
   }, [clave, principal]);
 
   useEffect(() => {
-    setNombre(""); setGoogle(null); setError(""); setG(null); setSel(0);
+    setNombre(""); setGoogle(null); setError(""); setG(null); setSel(0); setEditando(null);
     cargarGrupo().then((d) => {
-      setConsulta(`${d.marca} ${d.variaciones[0]?.texto || ""} impresora`.trim());
+      setConsulta(`${d.marca} ${d.clave.split("|")[1] || ""} impresora`.replace(/\s+/g, " "));  // MARCA + números + impresora
     }).catch((e) => setError(e.message));
   }, [clave, principal, version, cargarGrupo]);
 
@@ -316,14 +319,24 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
           <input type="checkbox" checked=${!!marcadas[v.llave]}
             title="Desmarca si esta variación es otra impresora"
             onChange=${(e) => setMarcadas({ ...marcadas, [v.llave]: e.target.checked })} />
+          ${editando && editando.llave === v.llave ? html`
+          <div class="txt editar">
+            <input type="text" value=${editando.valor} ref=${(el) => el && !el.dataset.listo && (el.dataset.listo = "1", el.focus(), el.select())}
+              onInput=${(e) => setEditando({ ...editando, valor: e.target.value })}
+              onKeyDown=${(e) => { if (e.key === "Enter" && editando.valor.trim()) normalizarComo(editando.valor, "manual", [v.llave]); else if (e.key === "Escape") setEditando(null); }} />
+            <div class="skus">Se guarda en las ${v.cantidad} de esta línea · Enter guarda · Esc cancela</div>
+          </div>
+          <button class="verde" disabled=${!editando.valor.trim()} onClick=${() => normalizarComo(editando.valor, "manual", [v.llave])}>Guardar</button>
+          <button onClick=${() => setEditando(null)}>Cancelar</button>` : html`
           <div class="txt">
             ${v.llave === principal && html`<span class="principal" title="La que estás verificando">★ </span>`}<span class="nombre">${v.texto}</span><span class="mas">+${v.cantidad}</span>
             <div class="skus">${v.skus.join(", ")}${v.total_skus > v.skus.length ? ` y ${v.total_skus - v.skus.length} más` : ""}${" · "}${v.origenes.join(", ").toLowerCase()}</div>
           </div>
           <button title="Deja marcada solo esta variación (las otras quedan pendientes, juntas entre sí)"
             onClick=${() => setMarcadas(Object.fromEntries(g.variaciones.map((x) => [x.llave, x.llave === v.llave])))}>Solo esta</button>
-          <button title="Copiar al campo de arriba para corregirlo" onClick=${() => setNombre(v.texto)}>✎</button>
-          <button class="verde" onClick=${() => normalizarComo(v.texto, "manual")}>Normalizar como este</button>
+          <button title="Corrige el texto aquí mismo; se guarda en todos los registros de esta línea"
+            onClick=${() => setEditando({ llave: v.llave, valor: v.texto })}>Editar grupo</button>
+          <button class="verde" onClick=${() => normalizarComo(v.texto, "manual")}>Normalizar como este</button>`}
         </div>`)}
     </div>
   `;
