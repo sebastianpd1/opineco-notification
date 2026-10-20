@@ -48,11 +48,16 @@ setInterval(limpiarAlertasVencidas, 30 * 60 * 1000);
 // el hub decide solo cuándo ya está resuelto y limpia la fila (mismo
 // criterio "sin historial" que ya tenía esta tabla).
 async function limpiarDespachosEntregados() {
-  const { data, error } = await supabase.from('pedidos_despachar').select('id, transportista, estado_envio');
+  const { data, error } = await supabase.from('pedidos_despachar').select('id, transportista, estado_envio, tracking_number, created_at');
   if (error) return console.error('Error leyendo pedidos_despachar para limpieza:', error);
 
+  // Tracking "0" = FileMaker despachó pero nunca mandó un número real, así
+  // que el hub no puede saber cuándo se entregó: se dejan 72 h a la vista y
+  // después se borran solos.
+  const LIMITE_TRACKING_CERO_MS = 72 * 60 * 60 * 1000;
   const idsEntregados = data
-    .filter((p) => clasificarEnvio(p.transportista, p.estado_envio) === 'entregado')
+    .filter((p) => clasificarEnvio(p.transportista, p.estado_envio) === 'entregado'
+      || (/^\s*0+\s*$/.test(String(p.tracking_number ?? '')) && Date.now() - new Date(p.created_at).getTime() > LIMITE_TRACKING_CERO_MS))
     .map((p) => p.id);
   if (idsEntregados.length === 0) return;
 
