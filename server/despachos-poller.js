@@ -89,6 +89,10 @@ async function poll(supabase) {
     const consultar = CONSULTORES[p.transportista];
     if (!consultar) continue;
 
+    // FileMaker a veces manda tracking "0" (todavía sin número real) — no hay
+    // nada que consultar, y pegarle a la API de cada courier con 0 es inútil.
+    if (!/[1-9A-Za-z]/.test(String(p.tracking_number))) continue;
+
     try {
       const estado = await consultar(p.tracking_number);
       if (!estado || estado === p.estado_envio) continue; // sin dato o sin cambios
