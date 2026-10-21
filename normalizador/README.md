@@ -28,7 +28,7 @@ hay trabajo hecho pide confirmación). Cada vez que se abre guarda un respaldo d
   Cada una tiene casilla (desmarca las que son otra impresora) y **Normalizar como este**.
 - **Editar grupo** (en cada línea): corriges el texto ahí mismo (Enter guarda, Esc cancela) y se
   guarda en todos los registros de esa línea (`DesignJet 730 +7` → los 7). Te quedas en el modelo
-  que estabas verificando.
+  que estabas verificando, y las otras líneas del grupo no se tocan (aunque quede una sola).
 - **Campo de arriba:** escribe o corrige el nombre y aprueba con **Normalizar como este**.
 - **Buscar y verificar en Google:** la búsqueda viene como `MARCA números impresora` (`HP 730 impresora`); busca con Chrome y un agente (`claude -p`, tu plan) deja lo que
   encontró en el campo de arriba; ✓ = aparece en los resultados reales, ⚠ = revísalo.

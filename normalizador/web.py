@@ -213,7 +213,7 @@ def grupo(c, clave):
     return {"clave": clave, "marca": marca, "variaciones": salida, "ya_normalizados": ya}
 
 
-def normalizar(c, clave, llaves, nombre, como):
+def normalizar(c, clave, llaves, nombre, como, completar_resto=True):
     nombre = sin_espacios_sobrantes(nombre)
     if not nombre:
         raise ValueError("El nombre está vacío.")
@@ -227,7 +227,8 @@ def normalizar(c, clave, llaves, nombre, como):
                            (nombre, como, accion, r["id"])).rowcount
             textos.add(r["texto"])
     # si en el grupo queda una sola variación idéntica, se completa sola en la misma acción (Deshacer revierte ambas)
-    extra, extra_texto = completar_si_queda_una(c, clave, accion)
+    # (no con "Editar grupo": ahí solo se toca esa línea)
+    extra, extra_texto = completar_si_queda_una(c, clave, accion) if completar_resto else (0, None)
     c.execute("update acciones set detalle=? where id=?",
               (json.dumps({"clave": clave, "nombre": nombre, "registros": n}, ensure_ascii=False), accion))
     c.commit()
@@ -552,7 +553,7 @@ class Manejador(BaseHTTPRequestHandler):
                     return self.responder(reabrir(c, d["clave"], d.get("texto")))
                 if self.path == "/api/normalizar":
                     return self.responder(normalizar(c, d["clave"], set(d["llaves"]), d["nombre"],
-                                                     d.get("como", "manual")))
+                                                     d.get("como", "manual"), not d.get("solo_esta")))
                 if self.path == "/api/deshacer":
                     return self.responder(deshacer(c, d.get("accion")))
                 if self.path == "/api/exportar":

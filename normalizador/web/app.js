@@ -222,13 +222,13 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
   const cuantos = g ? g.variaciones.filter((v) => marcadas[v.llave]).reduce((s, v) => s + v.cantidad, 0) : 0;
 
   // soloLlaves: para → (completa solo la seleccionada, tal cual)
-  const normalizarComo = async (valor, como, soloLlaves) => {
+  const normalizarComo = async (valor, como, soloLlaves, soloEsta = false) => {
     const usar = soloLlaves || llaves;
     if (!usar.length) return avisar("Marca al menos una variación.");
     if (enviando.current) return;
     enviando.current = true;
     try {
-      const r = await api("/api/normalizar", { clave, llaves: usar, nombre: valor, como });
+      const r = await api("/api/normalizar", { clave, llaves: usar, nombre: valor, como, solo_esta: soloEsta });
       const d = await api(`/api/grupo?clave=${encodeURIComponent(clave)}`);
       const texto = r.tal_cual
         ? `“${r.nombre}” completado tal cual (${r.registros} registros)`
@@ -323,10 +323,10 @@ function Grupo({ clave, principal, version, avisar, alNormalizar }) {
           <div class="txt editar">
             <input type="text" value=${editando.valor} ref=${(el) => el && !el.dataset.listo && (el.dataset.listo = "1", el.focus(), el.select())}
               onInput=${(e) => setEditando({ ...editando, valor: e.target.value })}
-              onKeyDown=${(e) => { if (e.key === "Enter" && editando.valor.trim()) normalizarComo(editando.valor, "manual", [v.llave]); else if (e.key === "Escape") setEditando(null); }} />
+              onKeyDown=${(e) => { if (e.key === "Enter" && editando.valor.trim()) normalizarComo(editando.valor, "manual", [v.llave], true); else if (e.key === "Escape") setEditando(null); }} />
             <div class="skus">Se guarda en las ${v.cantidad} de esta línea · Enter guarda · Esc cancela</div>
           </div>
-          <button class="verde" disabled=${!editando.valor.trim()} onClick=${() => normalizarComo(editando.valor, "manual", [v.llave])}>Guardar</button>
+          <button class="verde" disabled=${!editando.valor.trim()} onClick=${() => normalizarComo(editando.valor, "manual", [v.llave], true)}>Guardar</button>
           <button onClick=${() => setEditando(null)}>Cancelar</button>` : html`
           <div class="txt">
             ${v.llave === principal && html`<span class="principal" title="La que estás verificando">★ </span>`}<span class="nombre">${v.texto}</span><span class="mas">+${v.cantidad}</span>
