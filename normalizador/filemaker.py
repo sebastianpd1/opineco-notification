@@ -32,6 +32,9 @@ POR_DEFECTO = {
     "FM_LAYOUT_COMPATIBILITY": "COMPATIBILITY",
     "FM_CAMPO_COMPATIBILITY_ID": "ID",
     "FM_CAMPO_COMPATIBILITY_IMPRESORA": "Printer",
+    # campo donde se escribe el nombre normalizado (el original queda en Impresora / Printer)
+    "FM_CAMPO_NORMALIZADA_DESTINO": "ImpresoraNormalizada",
+    "FM_CAMPO_COMPATIBILITY_DESTINO": "ImpresoraNormalizada",
     "FM_TIMEOUT": "15",
 }
 
@@ -118,8 +121,15 @@ def buscar(layout, campo, criterio):
     return registros(xml)
 
 
-def editar(layout, recid, campo, valor):
-    _, xml = llamar(layout, [(campo, valor), ("-recid", recid), ("-edit", None)])
+def campos_del_layout(layout):
+    """Nombres de los campos que el layout publica por XML (en minúsculas → nombre real)."""
+    _, xml = llamar(layout, [("-max", 1), ("-findany", None)])
+    return {n.lower(): n for n in re.findall(r'<field-definition [^>]*name="([^"]+)"', xml)}
+
+
+def editar(layout, recid, campos):
+    """campos: {nombre_campo: valor}; todos se escriben en una sola llamada."""
+    _, xml = llamar(layout, list(campos.items()) + [("-recid", recid), ("-edit", None)])
     codigo = codigo_error(xml)
     if codigo != "0":
         raise RuntimeError(f"FileMaker: error {codigo} al editar el registro {recid}")

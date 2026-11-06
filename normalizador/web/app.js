@@ -167,10 +167,10 @@ function App() {
 }
 
 function envioFM(f) {
-  if (f.como === "auto") return "—";
   if (!f.fm_recid) return html`<span title="Esta lista vino de CSV: recárgala desde FileMaker">sin FileMaker</span>`;
   if (f.fm_error) return html`<span class="error" title=${f.fm_error}>⚠ error</span>`;
-  return f.fm_valor === f.nombre ? html`<span class="ok">✓ escrito</span>` : "⏳ por enviar";
+  const listo = f.fm_norm === f.nombre && (f.fm_valor == null || f.fm_valor === f.texto);
+  return listo ? html`<span class="ok" title="ImpresoraNormalizada escrita en FileMaker">✓ escrito</span>` : "⏳ por enviar";
 }
 
 function EstadoFM({ fm, avisar }) {
@@ -184,7 +184,8 @@ function EstadoFM({ fm, avisar }) {
       ? html`<span class="stat">${fm.carga.mensaje}</span>`
       : fm.configurado && html`<button disabled=${!fm.ok} title="Trae lo nuevo de FileMaker; lo ya normalizado se conserva"
           onClick=${() => post("/api/fm/recargar")}>Recargar desde FileMaker</button>`}
-    ${fm.por_enviar > 0 && html`<span class="stat">Por enviar <b>${fm.por_enviar}</b></span>`}
+    ${fm.destino && html`<span class="fm rojo" title=${fm.destino}>⚠ ${fm.destino}</span>`}
+    ${fm.por_enviar > 0 && html`<span class="stat" title="Registros que faltan escribir en FileMaker (ImpresoraNormalizada y, donde se había cambiado, el original de vuelta en Impresora/Printer)">Por enviar <b>${fm.por_enviar.toLocaleString("es-CL")}</b></span>`}
     ${fm.errores > 0 && html`<button class="error" title="Envíos que FileMaker rechazó" onClick=${() => post("/api/fm/reintentar")}>
         ⚠ ${fm.errores} con error · Reintentar</button>`}
   `;

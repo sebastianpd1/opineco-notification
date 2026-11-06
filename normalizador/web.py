@@ -59,7 +59,8 @@ def conectar():
     c.row_factory = sqlite3.Row
     c.executescript(ESQUEMA)
     existentes = {r[1] for r in c.execute("pragma table_info(filas)")}
-    for col in ("fm_recid", "fm_valor", "fm_error"):  # FileMaker: record-id, último valor escrito, error
+    # FileMaker: record-id, último valor escrito en Impresora/Printer, error, último valor escrito en ImpresoraNormalizada
+    for col in ("fm_recid", "fm_valor", "fm_error", "fm_norm"):
         if col not in existentes:
             c.execute(f"alter table filas add column {col} text")
     c.commit()
@@ -70,10 +71,14 @@ def conectar():
 ESTADO = {"fm": {"ok": None, "detalle": "Revisando…", "fecha": None},
           "carga": {"activa": False, "mensaje": "", "error": None}}
 
-# Qué valor debe tener FileMaker para cada fila: el nombre si lo normalizaste tú (manual o Google);
-# el texto original si antes se escribió y luego se deshizo/reabrió. Los automáticos no se envían.
-DESEADO = ("case when estado='COMPLETADO' and como in ('manual','google') then nombre "
-           "when fm_valor is not null then texto end")
+# Qué debe tener FileMaker en cada fila:
+# - Impresora / Printer: siempre el texto original. Solo se reescribe si antes el programa le puso otra cosa.
+# - ImpresoraNormalizada: el nombre normalizado si está completado (manual, Google o automático); vacío si se
+#   reabrió/deshizo después de haberlo escrito.
+DESEADO_NORM = "(case when estado='COMPLETADO' then nombre when fm_norm is not null then '' end)"
+FALTA_ORIGINAL = "(fm_valor is not null and fm_valor is not texto)"
+FALTA_NORM = f"({DESEADO_NORM} is not null and fm_norm is not {DESEADO_NORM})"
+POR_ENVIAR = f"fm_recid is not null and fm_error is null and ({FALTA_ORIGINAL} or {FALTA_NORM})"
 
 
 # ------------------------------------------------------------------ reglas (literales, sin adivinar)
@@ -187,7 +192,7 @@ def lista(c, q, offset, limite, estado="PENDIENTE"):
         args += [f"%{q}%", f"%{q}%", f"%{q}%"]
     total = c.execute("select count(*) " + sql, args).fetchone()[0]
     filas = [dict(r) for r in c.execute(
-        "select id, sku, texto, marca, clave, origen, nombre, como, fm_recid, fm_valor, fm_error " + sql +
+        "select id, sku, texto, marca, clave, origen, nombre, como, fm_recid, fm_valor, fm_error, fm_norm " + sql +
         # completados: lo último que hiciste arriba (por acción, la más nueva primero); los automáticos al final
         (" order by accion is null, accion desc, sku, texto" if estado == "COMPLETADO" else " order by sku, texto") +
         " limit ? offset ?",
@@ -341,19 +346,19 @@ def cargar_desde_filemaker(c):
             for n in nuevas:
                 v = por_recid.get((n["origen"], n["fm_recid"]))
                 if v:  # ya conocido: se mantiene tal cual (su texto original, estado y lo enviado)
-                    datos = {k: v[k] for k in ("texto", "estado", "nombre", "como", "accion", "fm_valor", "fm_error")}
+                    datos = {k: v[k] for k in ("texto", "estado", "nombre", "como", "accion", "fm_valor", "fm_error", "fm_norm")}
                 else:
                     datos = {"texto": n["texto"], "estado": "PENDIENTE", "nombre": None, "como": None,
-                             "accion": None, "fm_valor": None, "fm_error": None}
+                             "accion": None, "fm_valor": None, "fm_error": None, "fm_norm": None}
                     previos = sin_recid.get((n["sku"], n["origen"], n["texto"]))
                     if previos:  # normalizado a mano cuando la lista venía de CSV
                         p = previos.pop()
                         datos.update(estado="COMPLETADO", nombre=p["nombre"], como=p["como"], accion=p["accion"])
                 c.execute("insert into filas(sku, origen, fm_id, marca_item, marca, texto, clave, estado, nombre, como,"
-                          " accion, fm_recid, fm_valor, fm_error) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          " accion, fm_recid, fm_valor, fm_error, fm_norm) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                           (n["sku"], n["origen"], n["fm_id"], n["marca_item"], n["marca"], datos["texto"],
                            clave(n["marca"], datos["texto"]), datos["estado"], datos["nombre"], datos["como"],
-                           datos["accion"], n["fm_recid"], datos["fm_valor"], datos["fm_error"]))
+                           datos["accion"], n["fm_recid"], datos["fm_valor"], datos["fm_error"], datos["fm_norm"]))
             c.commit()
             r = loop_automatico(c)
         carga["mensaje"] = (f"Cargados {len(nuevas):,} registros desde FileMaker; "
@@ -378,30 +383,59 @@ class Sincronizador(threading.Thread):
         super().__init__(daemon=True)
         self.forzar = True
 
+    def campos(self, cfg):
+        """Por layout: (campo original, campo destino). Confirma que el destino existe en el layout;
+        si no, no se escribe nada y la página lo muestra."""
+        salida, faltan = {}, []
+        for origen, lay, orig, dest in (("NORMALIZADA", "FM_LAYOUT_NORMALIZADA", "FM_CAMPO_NORMALIZADA_IMPRESORA",
+                                          "FM_CAMPO_NORMALIZADA_DESTINO"),
+                                         ("COMPATIBILITY", "FM_LAYOUT_COMPATIBILITY", "FM_CAMPO_COMPATIBILITY_IMPRESORA",
+                                          "FM_CAMPO_COMPATIBILITY_DESTINO")):
+            existentes = filemaker.campos_del_layout(cfg[lay])
+            if cfg[dest].lower() not in existentes:
+                faltan.append(f"{cfg[dest]} en el layout {cfg[lay]}")
+            salida[origen] = (cfg[lay], cfg[orig], existentes.get(cfg[dest].lower()))
+        ESTADO["destino"] = ("Falta el campo " + " y ".join(faltan) +
+                             " (créalo y agrégalo al layout; mientras tanto no se escribe nada)") if faltan else None
+        return None if faltan else salida
+
     def run(self):
         c = conectar()
         ultimo = 0
         cfg = filemaker.config()
-        destino = {"NORMALIZADA": (cfg["FM_LAYOUT_NORMALIZADA"], cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"]),
-                   "COMPATIBILITY": (cfg["FM_LAYOUT_COMPATIBILITY"], cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"])}
+        destino = None
         while True:
             espera = 60 if ESTADO["fm"].get("ok") else 20
             if self.forzar or time.time() - ultimo > espera:
                 ESTADO["fm"] = filemaker.estado()
                 ultimo, self.forzar = time.time(), False
+                if ESTADO["fm"].get("ok"):
+                    try:
+                        destino = self.campos(cfg)
+                    except filemaker.FMCaido as e:
+                        ESTADO["fm"] = {"ok": False, "detalle": str(e), "fecha": time.time()}
             trabajo = False
-            if ESTADO["fm"].get("ok") and not ESTADO["carga"]["activa"]:
+            if destino and ESTADO["fm"].get("ok") and not ESTADO["carga"]["activa"]:
                 with LOCK:
-                    filas = c.execute(f"select id, origen, fm_recid, {DESEADO} as quiere from filas"
-                                      f" where fm_recid is not null and fm_error is null and {DESEADO} is not null"
-                                      f" and (fm_valor is null or fm_valor != {DESEADO}) limit 25").fetchall()
+                    filas = c.execute(f"select id, origen, fm_recid, texto, {FALTA_ORIGINAL} as falta_original,"
+                                      f" {FALTA_NORM} as falta_norm, {DESEADO_NORM} as norm"
+                                      f" from filas where {POR_ENVIAR} limit 25").fetchall()
                 for f in filas:
                     trabajo = True
-                    layout, campo = destino[f["origen"]]
+                    layout, campo_original, campo_norm = destino[f["origen"]]
+                    campos = {}
+                    if f["falta_original"]:
+                        campos[campo_original] = f["texto"]  # devuelve el texto original
+                    if f["falta_norm"]:
+                        campos[campo_norm] = f["norm"]
                     try:
-                        filemaker.editar(layout, f["fm_recid"], campo, f["quiere"])
+                        filemaker.editar(layout, f["fm_recid"], campos)
                         with LOCK:
-                            c.execute("update filas set fm_valor=?, fm_error=null where id=?", (f["quiere"], f["id"]))
+                            if f["falta_original"]:
+                                c.execute("update filas set fm_valor=texto where id=?", (f["id"],))
+                            if f["falta_norm"]:
+                                c.execute("update filas set fm_norm=? where id=?", (f["norm"], f["id"]))
+                            c.execute("update filas set fm_error=null where id=?", (f["id"],))
                             c.commit()
                     except filemaker.FMCaido as e:
                         ESTADO["fm"] = {"ok": False, "detalle": str(e), "fecha": time.time()}
@@ -418,13 +452,11 @@ SINCRONIZADOR = Sincronizador()
 
 
 def estado_filemaker(c):
-    por_enviar = c.execute(f"select count(*) from filas where fm_recid is not null and fm_error is null"
-                           f" and {DESEADO} is not null and (fm_valor is null or fm_valor != {DESEADO})").fetchone()[0]
+    por_enviar = c.execute(f"select count(*) from filas where {POR_ENVIAR}").fetchone()[0]
     errores = c.execute("select count(*) from filas where fm_error is not null").fetchone()[0]
-    sin_fm = c.execute("select count(*) from filas where fm_recid is null and estado='COMPLETADO'"
-                       " and como in ('manual','google')").fetchone()[0]
+    sin_fm = c.execute("select count(*) from filas where fm_recid is null and estado='COMPLETADO'").fetchone()[0]
     return {**ESTADO["fm"], "configurado": filemaker.configurado(), "carga": ESTADO["carga"],
-            "por_enviar": por_enviar, "errores": errores, "sin_filemaker": sin_fm}
+            "por_enviar": por_enviar, "errores": errores, "sin_filemaker": sin_fm, "destino": ESTADO.get("destino")}
 
 
 # ------------------------------------------------------------------ Google + agente

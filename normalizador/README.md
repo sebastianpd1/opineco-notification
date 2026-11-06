@@ -50,12 +50,15 @@ Con `datos/filemaker.env` configurado (copiar `filemaker.env.ejemplo` y completa
 clave de una cuenta con XML Web Publishing), las listas se leen **directo de FileMaker por XML** y no
 hacen falta los CSV:
 
-- Cada fila trae su `record-id`, y al normalizar (manual o Google) se edita el mismo campo en la tabla
-  madre: `COMPATIBILIDADNORMALIZADA::Impresora` o `COMPATIBILITY::Printer`. Los automáticos no se envían.
+- Cada fila trae su `record-id`. Lo normalizado (manual, Google **y automático**) se escribe en el campo
+  **ImpresoraNormalizada** de la tabla madre (`COMPATIBILIDADNORMALIZADA` y `COMPATIBILITY`). El campo
+  original (`Impresora` / `Printer`) queda con el texto que venía; si una versión anterior del programa
+  le había escrito encima, se le devuelve el original. El campo tiene que existir y estar en el layout
+  del XML; si falta, arriba aparece **⚠ Falta el campo…** y no se escribe nada hasta que lo agregues.
 - **Indicador ● FileMaker:** verde si responde 200 **con** datos de FileMaker; rojo si no responde o
   responde vacío (200 sin nada). Se revisa cada minuto (cada 20 s si está caído).
 - Si FileMaker está caído, lo normalizado queda **Por enviar** y se manda solo cuando vuelve.
-  **Deshacer** y **Reabrir** restauran en FileMaker el texto original.
+  **Deshacer** y **Reabrir** dejan vacío ImpresoraNormalizada en FileMaker.
 - **Recargar desde FileMaker** trae registros nuevos conservando todo el avance (se reconoce cada
   fila por su record-id; antes se guarda un respaldo). La primera vez traspasa lo normalizado con CSV.
 - En **Completados**, la columna FileMaker muestra ✓ escrito, ⏳ por enviar o ⚠ error (con Reintentar).
