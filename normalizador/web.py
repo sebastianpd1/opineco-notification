@@ -509,11 +509,12 @@ class Sincronizador(threading.Thread):
                 faltan.append(f"{cfg[dest]} en el layout {cfg[lay]}")
             salida[origen] = (cfg[lay], cfg[orig], existentes.get(cfg[dest].lower()))
         ESTADO["destino"] = ("Falta el campo " + " y ".join(faltan) +
-                             " (créalo y agrégalo al layout, o usa Unir tablas)") if faltan else None
-        # qué filas se pueden enviar: sin campo destino, solo devolver el original
-        ESTADO["envio"] = "fm_recid is not null and fm_error is null and (" + " or ".join(
-            f"(origen='{o}' and ({FALTA_ORIGINAL}" + (f" or {FALTA_NORM}))" if d[2] else "))")
-            for o, d in salida.items()) + ")"
+                             " (ese layout no se toca; usa Unir tablas)") if faltan else None
+        # qué filas se pueden enviar: un layout sin el campo destino no se toca para nada
+        # (COMPATIBILIDADNORMALIZADA queda como está; lo suyo pasa a COMPATIBILITY con Unir tablas)
+        partes = [f"origen='{o}'" for o, d in salida.items() if d[2]]
+        ESTADO["envio"] = (f"fm_recid is not null and fm_error is null and ({' or '.join(partes)})"
+                           f" and ({FALTA_ORIGINAL} or {FALTA_NORM})") if partes else "0"
         return salida
 
     def run(self):
@@ -542,8 +543,8 @@ class Sincronizador(threading.Thread):
                     if f["origen"] not in destino:
                         continue
                     layout, campo_original, campo_norm = destino[f["origen"]]
-                    if f["falta_norm"] and not campo_norm:
-                        f = {**dict(f), "falta_norm": 0}
+                    if not campo_norm:
+                        continue
                     campos = {}
                     if f["falta_original"]:
                         campos[campo_original] = f["texto"]  # devuelve el texto original
