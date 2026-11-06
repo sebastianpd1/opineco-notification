@@ -55,6 +55,14 @@ hacen falta los CSV:
   original (`Impresora` / `Printer`) queda con el texto que venía; si una versión anterior del programa
   le había escrito encima, se le devuelve el original. El campo tiene que existir y estar en el layout
   del XML; si falta, arriba aparece **⚠ Falta el campo…** y no se escribe nada hasta que lo agregues.
+- **Unir tablas…** (una sola vez): pasa COMPATIBILIDADNORMALIZADA a COMPATIBILITY para quedar con una
+  sola tabla. Por cada registro de la normalizada: si en COMPATIBILITY ya existe ese SKU con esa impresora
+  (mismo texto o el nombre normalizado, sin contar espacios), no se duplica y solo se completa su
+  ImpresoraNormalizada si estaba vacía; si no existe, se crea (SKU, marca, impresora original,
+  ImpresoraNormalizada). Antes muestra cuántos crea y completa y espera **Confirmar y unir**. No borra
+  nada, guarda un respaldo y, si se corta, al repetirlo no duplica. Después el normalizador lee solo
+  COMPATIBILITY: lo que ya trae ImpresoraNormalizada llega como completado ("ya en FileMaker") y lo demás
+  queda pendiente (si está escrito distinto a un nombre ya usado en su grupo, no se completa solo).
 - **Indicador ● FileMaker:** verde si responde 200 **con** datos de FileMaker; rojo si no responde o
   responde vacío (200 sin nada). Se revisa cada minuto (cada 20 s si está caído).
 - Si FileMaker está caído, lo normalizado queda **Por enviar** y se manda solo cuando vuelve.

@@ -69,7 +69,8 @@ def conectar():
 
 # Estado compartido con la página: FileMaker (salud) y la carga en curso.
 ESTADO = {"fm": {"ok": None, "detalle": "Revisando…", "fecha": None},
-          "carga": {"activa": False, "mensaje": "", "error": None}}
+          "carga": {"activa": False, "mensaje": "", "error": None},
+          "unir": {}}
 
 # Qué debe tener FileMaker en cada fila:
 # - Impresora / Printer: siempre el texto original. Solo se reescribe si antes el programa le puso otra cosa.
@@ -156,6 +157,11 @@ def completar_si_queda_una(c, clave, accion=None):
                  (clave,)).fetchone():
         return 0, None
     nombre = max(set(textos), key=textos.count)
+    # si el grupo ya trae nombres normalizados desde FileMaker y este está escrito distinto, lo revisas tú
+    ya = {r[0] for r in c.execute("select distinct nombre from filas where clave=? and estado='COMPLETADO'"
+                                  " and como='filemaker'", (clave,))}
+    if ya and nombre not in ya:
+        return 0, None
     n = c.execute("update filas set estado='COMPLETADO', nombre=?, como='auto', accion=?"
                   " where clave=? and estado='PENDIENTE'", (nombre, accion, clave)).rowcount
     return n, nombre
@@ -289,6 +295,11 @@ def exportar(c):
 
 # ------------------------------------------------------------------ FileMaker: carga y envío
 
+def una_tabla(c):
+    fila = c.execute("select v from meta where k='una_tabla'").fetchone()
+    return bool(fila and fila[0] == "1")
+
+
 def cargar_desde_filemaker(c):
     """Trae las 3 tablas por XML (cada fila con su record-id) y reemplaza la lista CONSERVANDO el avance:
     - filas que ya venían de FileMaker: se reconocen por record-id y quedan igual (estado, nombre, texto);
@@ -302,13 +313,15 @@ def cargar_desde_filemaker(c):
             carga["mensaje"] = f"Leyendo {layout}: {n:,} de {total:,}".replace(",", ".")
         inv = filemaker.traer_todo(cfg["FM_LAYOUT_INVENTARIO"],
                                    [cfg["FM_CAMPO_INVENTARIO_ITEM"], cfg["FM_CAMPO_INVENTARIO_MARCA"]], progreso)
-        norm = filemaker.traer_todo(cfg["FM_LAYOUT_NORMALIZADA"],
-                                    [cfg["FM_CAMPO_NORMALIZADA_SKU"], cfg["FM_CAMPO_NORMALIZADA_MARCA"],
-                                     cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"]], progreso)
+        sola = una_tabla(c)  # después de "Unir tablas" todo vive en COMPATIBILITY
+        norm = [] if sola else filemaker.traer_todo(
+            cfg["FM_LAYOUT_NORMALIZADA"], [cfg["FM_CAMPO_NORMALIZADA_SKU"], cfg["FM_CAMPO_NORMALIZADA_MARCA"],
+                                           cfg["FM_CAMPO_NORMALIZADA_IMPRESORA"]], progreso)
+        campo_norm = cfg["FM_CAMPO_COMPATIBILITY_DESTINO"]
         comp = filemaker.traer_todo(cfg["FM_LAYOUT_COMPATIBILITY"],
                                     [cfg["FM_CAMPO_COMPATIBILITY_ID"], cfg["FM_CAMPO_COMPATIBILITY_SKU"],
-                                     cfg["FM_CAMPO_COMPATIBILITY_MARCA"], cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"]],
-                                    progreso)
+                                     cfg["FM_CAMPO_COMPATIBILITY_MARCA"], cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"]]
+                                    + ([campo_norm] if sola else []), progreso)
         inventario = {r.get(cfg["FM_CAMPO_INVENTARIO_ITEM"], "").strip(): r.get(cfg["FM_CAMPO_INVENTARIO_MARCA"], "")
                       for r in inv}
         nuevas = []
@@ -321,7 +334,8 @@ def cargar_desde_filemaker(c):
             marca_tabla = r.get(campo_marca, "").strip()
             marca = (inventario.get(sku) or marca_tabla or "SIN MARCA").strip().upper()
             nuevas.append({"sku": sku, "origen": origen, "fm_id": fm_id, "marca_item": marca_tabla, "marca": marca,
-                           "texto": texto, "fm_recid": r["_recid"]})
+                           "texto": texto, "fm_recid": r["_recid"],
+                           "ya_normalizada": sin_espacios_sobrantes(r.get(campo_norm, "")) if sola else ""})
 
         for r in norm:
             agregar(r, "NORMALIZADA", cfg["FM_CAMPO_NORMALIZADA_SKU"], cfg["FM_CAMPO_NORMALIZADA_MARCA"],
@@ -351,7 +365,10 @@ def cargar_desde_filemaker(c):
                     datos = {"texto": n["texto"], "estado": "PENDIENTE", "nombre": None, "como": None,
                              "accion": None, "fm_valor": None, "fm_error": None, "fm_norm": None}
                     previos = sin_recid.get((n["sku"], n["origen"], n["texto"]))
-                    if previos:  # normalizado a mano cuando la lista venía de CSV
+                    if n["ya_normalizada"]:  # ya viene normalizada desde FileMaker (p. ej. creada al unir tablas)
+                        datos.update(estado="COMPLETADO", nombre=n["ya_normalizada"], como="filemaker",
+                                     fm_norm=n["ya_normalizada"])
+                    elif previos:  # normalizado a mano cuando la lista venía de CSV
                         p = previos.pop()
                         datos.update(estado="COMPLETADO", nombre=p["nombre"], como=p["como"], accion=p["accion"])
                 c.execute("insert into filas(sku, origen, fm_id, marca_item, marca, texto, clave, estado, nombre, como,"
@@ -368,6 +385,98 @@ def cargar_desde_filemaker(c):
         carga["mensaje"] = "No se pudo cargar desde FileMaker (la lista anterior sigue igual)."
     finally:
         carga["activa"] = False
+        SINCRONIZADOR.forzar = True  # vuelve a revisar los campos de FileMaker con la lista nueva
+
+
+# ------------------------------------------------------------------ Unir tablas
+# Merge de COMPATIBILIDADNORMALIZADA dentro de COMPATIBILITY, para quedar con una sola tabla.
+# Por cada registro de la normalizada (con su texto original y su nombre normalizado):
+# - si en COMPATIBILITY ya existe ese SKU con esa impresora (mismo texto original o el nombre normalizado,
+#   sin contar espacios/saltos de línea): no se crea nada; si su ImpresoraNormalizada está vacía, se completa;
+# - si no existe: se crea en COMPATIBILITY (SKU, marca, impresora original, ImpresoraNormalizada).
+# No se borra nada. Repetirlo no duplica: vuelve a leer COMPATIBILITY y lo ya creado cuenta como existente.
+
+def revisar_union(c):
+    unir = ESTADO["unir"]
+    unir.clear()
+    unir.update(estado="revisando", mensaje="Leyendo COMPATIBILITY en FileMaker…")
+    try:
+        cfg = filemaker.config()
+        lay = cfg["FM_LAYOUT_COMPATIBILITY"]
+        c_sku, c_marca, c_imp, c_norm = (cfg["FM_CAMPO_COMPATIBILITY_SKU"], cfg["FM_CAMPO_COMPATIBILITY_MARCA"],
+                                         cfg["FM_CAMPO_COMPATIBILITY_IMPRESORA"], cfg["FM_CAMPO_COMPATIBILITY_DESTINO"])
+
+        def progreso(layout, n, total):
+            unir["mensaje"] = f"Leyendo {layout}: {n:,} de {total:,}".replace(",", ".")
+        comp = filemaker.traer_todo(lay, [c_sku, c_marca, c_imp, c_norm], progreso)
+        existentes = {}
+        for r in comp:
+            llave = (r.get(c_sku, "").strip(), igual(r.get(c_imp, "")))
+            existentes.setdefault(llave, r)
+        with LOCK:
+            norm = [dict(f) for f in c.execute("select sku, marca_item, marca, texto, estado, nombre from filas"
+                                               " where origen='NORMALIZADA' order by sku, texto")]
+        if not norm:
+            raise ValueError("No hay registros de COMPATIBILIDADNORMALIZADA en el normalizador.")
+        crear, completar, ya, repetidas, sin_nombre = [], {}, 0, 0, 0
+        creadas = set()
+        for f in norm:
+            nombre = f["nombre"] if f["estado"] == "COMPLETADO" else ""
+            sin_nombre += not nombre
+            llaves = [(f["sku"], igual(f["texto"]))] + ([(f["sku"], igual(nombre))] if nombre else [])
+            r = next((existentes[k] for k in llaves if k in existentes), None)
+            if r:
+                if nombre and not r.get(c_norm, "").strip() and r["_recid"] not in completar:
+                    completar[r["_recid"]] = nombre
+                else:
+                    ya += 1
+            elif llaves[0] in creadas:
+                repetidas += 1  # la normalizada traía dos veces el mismo SKU con la misma impresora
+            else:
+                creadas.add(llaves[0])
+                crear.append({c_sku: f["sku"], c_marca: f["marca_item"] or f["marca"], c_imp: f["texto"],
+                              c_norm: nombre})
+        unir.update(estado="listo", mensaje="", crear=len(crear), completar=len(completar), ya=ya,
+                    repetidas=repetidas, sin_nombre=sin_nombre, total=len(norm),
+                    plan={"layout": lay, "campo_norm": c_norm, "crear": crear, "completar": completar})
+    except Exception as e:
+        unir.update(estado="error", mensaje=str(e))
+
+
+def ejecutar_union(c):
+    unir = ESTADO["unir"]
+    plan = unir.get("plan")
+    if not plan:
+        return
+    unir.update(estado="uniendo", ejecutando=True)
+    lay, c_norm = plan["layout"], plan["campo_norm"]
+    hechos, total = 0, len(plan["completar"]) + len(plan["crear"])
+    try:
+        respaldar("antes-de-unir-tablas")
+        for recid, nombre in list(plan["completar"].items()):
+            filemaker.editar(lay, recid, {c_norm: nombre})
+            del plan["completar"][recid]
+            hechos += 1
+            unir["mensaje"] = f"Uniendo tablas: {hechos:,} de {total:,}".replace(",", ".")
+        while plan["crear"]:
+            filemaker.crear(lay, plan["crear"][0])
+            plan["crear"].pop(0)
+            hechos += 1
+            unir["mensaje"] = f"Uniendo tablas: {hechos:,} de {total:,}".replace(",", ".")
+        with LOCK:
+            c.execute("insert or replace into meta values('una_tabla', '1')")
+            c.commit()
+        unir.update(estado="hecho", ejecutando=False,
+                    mensaje=f"Listo: {hechos:,} registros escritos en COMPATIBILITY. Ahora se recarga solo desde ahí."
+                    .replace(",", "."))
+        unir.pop("plan", None)
+        ESTADO["carga"]["activa"] = True
+        cargar_desde_filemaker(c)
+    except Exception as e:
+        unir.update(estado="error", ejecutando=False,
+                    mensaje=f"Se cortó después de {hechos:,} de {total:,} ({e}). Vuelve a apretar Unir tablas: "
+                            "lo ya hecho no se repite.".replace(",", "."))
+        unir.pop("plan", None)
 
 
 def lanzar_carga(c):
@@ -383,21 +492,29 @@ class Sincronizador(threading.Thread):
         super().__init__(daemon=True)
         self.forzar = True
 
-    def campos(self, cfg):
-        """Por layout: (campo original, campo destino). Confirma que el destino existe en el layout;
-        si no, no se escribe nada y la página lo muestra."""
+    def campos(self, cfg, c):
+        """Por origen: (layout, campo original, campo destino o None si falta en el layout).
+        Si falta en un layout, ese layout no recibe lo normalizado (el otro sí) y la página lo avisa."""
         salida, faltan = {}, []
-        for origen, lay, orig, dest in (("NORMALIZADA", "FM_LAYOUT_NORMALIZADA", "FM_CAMPO_NORMALIZADA_IMPRESORA",
-                                          "FM_CAMPO_NORMALIZADA_DESTINO"),
-                                         ("COMPATIBILITY", "FM_LAYOUT_COMPATIBILITY", "FM_CAMPO_COMPATIBILITY_IMPRESORA",
-                                          "FM_CAMPO_COMPATIBILITY_DESTINO")):
+        origenes = [("COMPATIBILITY", "FM_LAYOUT_COMPATIBILITY", "FM_CAMPO_COMPATIBILITY_IMPRESORA",
+                     "FM_CAMPO_COMPATIBILITY_DESTINO")]
+        with LOCK:
+            hay_norm = c.execute("select 1 from filas where origen='NORMALIZADA' limit 1").fetchone()
+        if hay_norm:
+            origenes.insert(0, ("NORMALIZADA", "FM_LAYOUT_NORMALIZADA", "FM_CAMPO_NORMALIZADA_IMPRESORA",
+                                "FM_CAMPO_NORMALIZADA_DESTINO"))
+        for origen, lay, orig, dest in origenes:
             existentes = filemaker.campos_del_layout(cfg[lay])
             if cfg[dest].lower() not in existentes:
                 faltan.append(f"{cfg[dest]} en el layout {cfg[lay]}")
             salida[origen] = (cfg[lay], cfg[orig], existentes.get(cfg[dest].lower()))
         ESTADO["destino"] = ("Falta el campo " + " y ".join(faltan) +
-                             " (créalo y agrégalo al layout; mientras tanto no se escribe nada)") if faltan else None
-        return None if faltan else salida
+                             " (créalo y agrégalo al layout, o usa Unir tablas)") if faltan else None
+        # qué filas se pueden enviar: sin campo destino, solo devolver el original
+        ESTADO["envio"] = "fm_recid is not null and fm_error is null and (" + " or ".join(
+            f"(origen='{o}' and ({FALTA_ORIGINAL}" + (f" or {FALTA_NORM}))" if d[2] else "))")
+            for o, d in salida.items()) + ")"
+        return salida
 
     def run(self):
         c = conectar()
@@ -411,18 +528,22 @@ class Sincronizador(threading.Thread):
                 ultimo, self.forzar = time.time(), False
                 if ESTADO["fm"].get("ok"):
                     try:
-                        destino = self.campos(cfg)
+                        destino = self.campos(cfg, c)
                     except filemaker.FMCaido as e:
                         ESTADO["fm"] = {"ok": False, "detalle": str(e), "fecha": time.time()}
             trabajo = False
-            if destino and ESTADO["fm"].get("ok") and not ESTADO["carga"]["activa"]:
+            if destino and ESTADO["fm"].get("ok") and not ESTADO["carga"]["activa"] and not ESTADO["unir"].get("ejecutando"):
                 with LOCK:
                     filas = c.execute(f"select id, origen, fm_recid, texto, {FALTA_ORIGINAL} as falta_original,"
                                       f" {FALTA_NORM} as falta_norm, {DESEADO_NORM} as norm"
-                                      f" from filas where {POR_ENVIAR} limit 25").fetchall()
+                                      f" from filas where {ESTADO['envio']} limit 25").fetchall()
                 for f in filas:
                     trabajo = True
+                    if f["origen"] not in destino:
+                        continue
                     layout, campo_original, campo_norm = destino[f["origen"]]
+                    if f["falta_norm"] and not campo_norm:
+                        f = {**dict(f), "falta_norm": 0}
                     campos = {}
                     if f["falta_original"]:
                         campos[campo_original] = f["texto"]  # devuelve el texto original
@@ -452,11 +573,12 @@ SINCRONIZADOR = Sincronizador()
 
 
 def estado_filemaker(c):
-    por_enviar = c.execute(f"select count(*) from filas where {POR_ENVIAR}").fetchone()[0]
+    por_enviar = c.execute(f"select count(*) from filas where {ESTADO.get('envio') or POR_ENVIAR}").fetchone()[0]
     errores = c.execute("select count(*) from filas where fm_error is not null").fetchone()[0]
     sin_fm = c.execute("select count(*) from filas where fm_recid is null and estado='COMPLETADO'").fetchone()[0]
     return {**ESTADO["fm"], "configurado": filemaker.configurado(), "carga": ESTADO["carga"],
-            "por_enviar": por_enviar, "errores": errores, "sin_filemaker": sin_fm, "destino": ESTADO.get("destino")}
+            "por_enviar": por_enviar, "errores": errores, "sin_filemaker": sin_fm, "destino": ESTADO.get("destino"),
+            "una_tabla": una_tabla(c), "unir": {k: v for k, v in ESTADO["unir"].items() if k != "plan"}}
 
 
 # ------------------------------------------------------------------ Google + agente
@@ -575,6 +697,20 @@ class Manejador(BaseHTTPRequestHandler):
                     raise ValueError("Primero configura datos/filemaker.env.")
                 lanzar_carga(c)
                 return self.responder({"mensaje": "Cargando desde FileMaker…"})
+            if self.path in ("/api/unir/revisar", "/api/unir/confirmar"):
+                if not filemaker.configurado():
+                    raise ValueError("Primero configura datos/filemaker.env.")
+                if ESTADO["carga"]["activa"] or ESTADO["unir"].get("estado") in ("revisando", "uniendo"):
+                    raise ValueError("Espera a que termine lo que está en curso.")
+                if self.path == "/api/unir/confirmar" and ESTADO["unir"].get("estado") != "listo":
+                    raise ValueError("Primero revisa la unión.")
+                hilo = revisar_union if self.path == "/api/unir/revisar" else ejecutar_union
+                threading.Thread(target=hilo, args=(c,), daemon=True).start()
+                return self.responder({"mensaje": "Revisando…" if hilo is revisar_union else "Uniendo tablas…"})
+            if self.path == "/api/unir/cancelar":
+                if ESTADO["unir"].get("estado") != "uniendo":
+                    ESTADO["unir"].clear()
+                return self.responder({"mensaje": "Cancelado"})
             with LOCK:
                 if self.path == "/api/fm/reintentar":
                     n = c.execute("update filas set fm_error=null where fm_error is not null").rowcount

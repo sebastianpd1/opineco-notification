@@ -141,7 +141,7 @@ function App() {
                   <td class="sku">${f.sku}</td>
                   <td>${f.texto}</td>
                   <td><b>${f.nombre}</b></td>
-                  <td class="nota">${{ auto: "automático", manual: "manual", google: "Google" }[f.como] || f.como}</td>
+                  <td class="nota">${{ auto: "automático", manual: "manual", google: "Google", filemaker: "ya en FileMaker" }[f.como] || f.como}</td>
                   <td class="nota">${envioFM(f)}</td>
                 </tr>`)}
             </tbody>
@@ -185,10 +185,36 @@ function EstadoFM({ fm, avisar }) {
       : fm.configurado && html`<button disabled=${!fm.ok} title="Trae lo nuevo de FileMaker; lo ya normalizado se conserva"
           onClick=${() => post("/api/fm/recargar")}>Recargar desde FileMaker</button>`}
     ${fm.destino && html`<span class="fm rojo" title=${fm.destino}>⚠ ${fm.destino}</span>`}
+    <${Unir} fm=${fm} post=${post} />
     ${fm.por_enviar > 0 && html`<span class="stat" title="Registros que faltan escribir en FileMaker (ImpresoraNormalizada y, donde se había cambiado, el original de vuelta en Impresora/Printer)">Por enviar <b>${fm.por_enviar.toLocaleString("es-CL")}</b></span>`}
     ${fm.errores > 0 && html`<button class="error" title="Envíos que FileMaker rechazó" onClick=${() => post("/api/fm/reintentar")}>
         ⚠ ${fm.errores} con error · Reintentar</button>`}
   `;
+}
+
+// Unir tablas: pasa COMPATIBILIDADNORMALIZADA a COMPATIBILITY (no duplica, no borra). Primero muestra
+// cuánto va a hacer y espera tu confirmación.
+function Unir({ fm, post }) {
+  const u = fm.unir || {};
+  if (!fm.configurado || (fm.una_tabla && u.estado !== "hecho")) return null;
+  const n = (x) => (x || 0).toLocaleString("es-CL");
+  if (u.estado === "revisando" || u.estado === "uniendo") return html`<span class="stat">${u.mensaje}</span>`;
+  if (u.estado === "listo") return html`
+    <div class="unir">
+      <b>Unir tablas en COMPATIBILITY</b> (${n(u.total)} registros de la normalizada):
+      se crean <b>${n(u.crear)}</b> · se completa ImpresoraNormalizada en <b>${n(u.completar)}</b> que ya existían ·
+      ya estaban <b>${n(u.ya)}</b> · repetidas en la normalizada <b>${n(u.repetidas)}</b>.
+      ${u.sin_nombre > 0 && html` Ojo: ${n(u.sin_nombre)} no están normalizadas y se crean con ImpresoraNormalizada vacía.`}
+      No se borra nada.
+      <button class="verde" onClick=${() => post("/api/unir/confirmar")}>Confirmar y unir</button>
+      <button onClick=${() => post("/api/unir/cancelar")}>Cancelar</button>
+    </div>`;
+  return html`
+    ${u.estado === "error" && html`<span class="fm rojo" title=${u.mensaje}>⚠ ${u.mensaje}</span>`}
+    ${u.estado === "hecho" && html`<span class="ok">${u.mensaje}</span>`}
+    ${!fm.una_tabla && html`<button disabled=${!fm.ok || fm.carga?.activa}
+      title="Pasa la normalizada a COMPATIBILITY: si ya existe el SKU con esa impresora no la duplica; si no, la crea"
+      onClick=${() => post("/api/unir/revisar")}>Unir tablas…</button>`}`;
 }
 
 function Grupo({ clave, principal, version, avisar, alNormalizar }) {

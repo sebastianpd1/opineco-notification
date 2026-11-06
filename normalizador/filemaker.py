@@ -135,6 +135,16 @@ def editar(layout, recid, campos):
         raise RuntimeError(f"FileMaker: error {codigo} al editar el registro {recid}")
 
 
+def crear(layout, campos):
+    """Crea un registro nuevo con esos campos; devuelve su record-id."""
+    _, xml = llamar(layout, list(campos.items()) + [("-new", None)])
+    codigo = codigo_error(xml)
+    if codigo != "0":
+        raise RuntimeError(f"FileMaker: error {codigo} al crear un registro en {layout}")
+    m = re.search(r'record-id="(\d+)"', xml)
+    return m.group(1) if m else None
+
+
 def traer_todo(layout, campos, progreso=None):
     """Trae TODOS los registros del layout, por páginas (-findall con -max/-skip).
     Antes confirma que los campos existen en el layout (si no, FileMaker los ignora en silencio)."""
