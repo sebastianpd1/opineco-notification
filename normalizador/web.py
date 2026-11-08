@@ -11,6 +11,7 @@ Regla: los SKU con filas en la normalizada usan esas; los SKU sin normalizada us
 Grupos: marca del SKU según INVENTARIO + todos los números del texto. Cada registro es una fila tal cual;
 lo único que se limpia son espacios y saltos de línea sobrantes. No se adivina nada.
 """
+import csv
 import json
 import re
 import os
@@ -438,44 +439,112 @@ def revisar_union(c):
                               c_norm: nombre})
         unir.update(estado="listo", mensaje="", crear=len(crear), completar=len(completar), ya=ya,
                     repetidas=repetidas, sin_nombre=sin_nombre, total=len(norm),
-                    plan={"layout": lay, "campo_norm": c_norm, "crear": crear, "completar": completar})
+                    plan={"layout": lay, "campo_norm": c_norm, "campo_sku": c_sku, "campo_imp": c_imp,
+                          "crear": crear, "completar": completar})
     except Exception as e:
         unir.update(estado="error", mensaje=str(e))
 
 
 def ejecutar_union(c):
+    """Escribe el plan en FileMaker con varios envíos a la vez. Si FileMaker no responde (corte de red,
+    Mac dormido, 200 vacío) espera y reintenta el mismo registro: no se rinde por un corte. Un registro
+    que FileMaker rechaza (con número de error) se anota y se sigue con el resto.
+    Todo queda en datos/unir.log para poder revisar qué pasó."""
     unir = ESTADO["unir"]
     plan = unir.get("plan")
     if not plan:
         return
     unir.update(estado="uniendo", ejecutando=True)
     lay, c_norm = plan["layout"], plan["campo_norm"]
-    hechos, total = 0, len(plan["completar"]) + len(plan["crear"])
+    tareas = ([("completar", recid, {c_norm: nombre}) for recid, nombre in plan["completar"].items()]
+              + [("crear", None, campos) for campos in plan["crear"]])
+    total = len(tareas)
+    cuenta = {"hechos": 0, "errores": []}
+    candado = threading.Lock()
+    archivo_log = DATOS / "unir.log"
+
+    def log(texto):
+        linea = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {texto}"
+        print(linea, flush=True)
+        with candado, open(archivo_log, "a", encoding="utf-8") as f:
+            f.write(linea + "\n")
+
+    c_sku, c_imp = plan["campo_sku"], plan["campo_imp"]
+
+    def ya_creado(campos):
+        """Tras un corte al crear: ¿FileMaker alcanzó a crearlo? (así el reintento no duplica)."""
+        for r in filemaker.buscar(lay, c_sku, campos[c_sku]):
+            if r.get(c_sku, "").strip() == campos[c_sku] and igual(r.get(c_imp, "")) == igual(campos[c_imp]):
+                return True
+        return False
+
+    def una(tarea):
+        tipo, recid, campos = tarea
+        cayo_desde, intentos = None, 0
+        while True:
+            try:
+                if tipo == "crear" and intentos and ya_creado(campos):
+                    break
+                if tipo == "completar":
+                    filemaker.editar(lay, recid, campos)
+                else:
+                    filemaker.crear(lay, campos)
+                break
+            except filemaker.FMCaido as e:
+                cayo_desde = cayo_desde or time.time()
+                if time.time() - cayo_desde > 6 * 3600:
+                    raise
+                espera = (2, 5, 10, 20)[min(intentos, 3)]
+                intentos += 1
+                unir["mensaje"] = (f"FileMaker no responde ({e}); reintentando sola… "
+                                   f"Van {cuenta['hechos']:,} de {total:,}").replace(",", ".")
+                log(f"sin respuesta: {e}; reintento en {espera} s")
+                time.sleep(espera)
+            except Exception as e:  # FileMaker rechazó este registro: se anota y se sigue
+                with candado:
+                    cuenta["errores"].append((tipo, recid, campos, str(e)))
+                log(f"rechazado ({tipo} {recid or campos}): {e}")
+                break
+        with candado:
+            cuenta["hechos"] += 1
+            n = cuenta["hechos"]
+        unir["mensaje"] = f"Uniendo tablas: {n:,} de {total:,}".replace(",", ".")
+        if n % 500 == 0:
+            log(f"van {n} de {total}")
+
     try:
         respaldar("antes-de-unir-tablas")
-        for recid, nombre in list(plan["completar"].items()):
-            filemaker.editar(lay, recid, {c_norm: nombre})
-            del plan["completar"][recid]
-            hechos += 1
-            unir["mensaje"] = f"Uniendo tablas: {hechos:,} de {total:,}".replace(",", ".")
-        while plan["crear"]:
-            filemaker.crear(lay, plan["crear"][0])
-            plan["crear"].pop(0)
-            hechos += 1
-            unir["mensaje"] = f"Uniendo tablas: {hechos:,} de {total:,}".replace(",", ".")
+        log(f"empieza: {len(plan['completar'])} por completar, {len(plan['crear'])} por crear")
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=int(filemaker.config().get("FM_ENVIOS_A_LA_VEZ", "4"))) as grupo_hilos:
+            list(grupo_hilos.map(una, tareas))
+        errores = cuenta["errores"]
+        unir.pop("plan", None)
+        if errores:
+            with open(DATOS / "unir-errores.csv", "w", encoding="utf-8", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["tipo", "record_id", "campos", "error"])
+                for tipo, recid, campos, err in errores:
+                    w.writerow([tipo, recid or "", json.dumps(campos, ensure_ascii=False), err])
+            unir.update(estado="error", ejecutando=False,
+                        mensaje=(f"Terminó: {total - len(errores):,} escritos, {len(errores):,} rechazados por "
+                                 f"FileMaker ({errores[0][3]}). Detalle en datos/unir-errores.csv").replace(",", "."))
+            log(unir["mensaje"])
+            return
         with LOCK:
             c.execute("insert or replace into meta values('una_tabla', '1')")
             c.commit()
         unir.update(estado="hecho", ejecutando=False,
-                    mensaje=f"Listo: {hechos:,} registros escritos en COMPATIBILITY. Ahora se recarga solo desde ahí."
+                    mensaje=f"Listo: {total:,} registros escritos en COMPATIBILITY. Ahora se recarga solo desde ahí."
                     .replace(",", "."))
-        unir.pop("plan", None)
+        log(unir["mensaje"])
         ESTADO["carga"]["activa"] = True
         cargar_desde_filemaker(c)
     except Exception as e:
         unir.update(estado="error", ejecutando=False,
-                    mensaje=f"Se cortó después de {hechos:,} de {total:,} ({e}). Vuelve a apretar Unir tablas: "
-                            "lo ya hecho no se repite.".replace(",", "."))
+                    mensaje=(f"Se cortó después de {cuenta['hechos']:,} de {total:,} ({e}). Vuelve a apretar "
+                             "Unir tablas: lo ya hecho no se repite.").replace(",", "."))
+        log(unir["mensaje"])
         unir.pop("plan", None)
 
 
@@ -768,7 +837,15 @@ def respaldar(motivo):
     return destino
 
 
+def no_dormir():
+    """En el Mac: que no se duerma mientras el normalizador está abierto (si se duerme se corta FileMaker).
+    caffeinate -w termina solo cuando se cierra este programa."""
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+
+
 def main():
+    no_dormir()
     respaldar("al-abrir")
     c = conectar()
     c.execute("create table if not exists meta(k text primary key, v text)")

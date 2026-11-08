@@ -60,7 +60,11 @@ hacen falta los CSV:
   (mismo texto o el nombre normalizado, sin contar espacios), no se duplica y solo se completa su
   ImpresoraNormalizada si estaba vacía; si no existe, se crea (SKU, marca, impresora original,
   ImpresoraNormalizada). Antes muestra cuántos crea y completa y espera **Confirmar y unir**. No borra
-  nada, guarda un respaldo y, si se corta, al repetirlo no duplica. Después el normalizador lee solo
+  nada y guarda un respaldo. Envía 4 registros a la vez; si FileMaker no responde (corte de red o 200
+  vacío) reintenta solo el mismo registro, y antes de reintentar una creación revisa si FileMaker alcanzó a
+  crearla, así no duplica. Lo que FileMaker rechaza con un número de error queda en
+  `datos/unir-errores.csv`, y todo lo que pasa, en `datos/unir.log`. Si se corta, al repetirlo no duplica.
+  Mientras está abierto, el normalizador no deja que el Mac se duerma. Después el normalizador lee solo
   COMPATIBILITY: lo que ya trae ImpresoraNormalizada llega como completado ("ya en FileMaker") y lo demás
   queda pendiente (si está escrito distinto a un nombre ya usado en su grupo, no se completa solo).
 - **Indicador ● FileMaker:** verde si responde 200 **con** datos de FileMaker; rojo si no responde o
