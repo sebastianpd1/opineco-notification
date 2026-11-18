@@ -265,4 +265,4 @@ function startMercadoLibrePoller(supabase) {
   console.log(`Poller de Mercado Libre activo (cada ${POLL_MS / 1000}s, reconciliación cada ${RECONCILE_MS / 1000}s, filtrando substatus=${SUBSTATUS_FILTER})`);
 }
 
-module.exports = { startMercadoLibrePoller, clasificarVenta };
+module.exports = { startMercadoLibrePoller, clasificarVenta, ESTADOS_FINALES };

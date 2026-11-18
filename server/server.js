@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { startDiscordBot } = require('./discord-bot');
 const { startEmailListener } = require('./email-listener');
-const { startMercadoLibrePoller, clasificarVenta } = require('./mercadolibre');
+const { startMercadoLibrePoller, clasificarVenta, ESTADOS_FINALES } = require('./mercadolibre');
 const { startDespachosPoller } = require('./despachos-poller');
 const { enviarPush } = require('./push');
 const { clasificarEnvio } = require('./couriers');
@@ -371,11 +371,31 @@ app.delete('/api/pedidos/despachar/:id', requireApiKey, async (req, res) => {
 // muestran en ningún lado. La clasificación mira status Y substatus (ver
 // mercadolibre.js) porque el status de nivel superior a veces tarda en
 // reflejar que el paquete ya salió.
-app.get('/api/ventas-ml', async (req, res) => {
-  const { data, error } = await supabase
+// Ventas ML que todavía no llegan a un estado final, compartidas entre todas
+// las pantallas por 15 s. Antes cada pantalla leía la tabla COMPLETA (con el
+// JSON de items, y nunca se borra nada) 2 veces cada 8 s y otra cada 30 s:
+// con varias sucursales abiertas todo el día eso agotó la cuota de egress de
+// Supabase (2026-11-18). Las finales no se muestran en ningún widget.
+const CACHE_VENTAS_MS = 15000;
+let cacheVentas = { t: 0, data: null, promesa: null };
+async function ventasNoFinales() {
+  if (cacheVentas.data && Date.now() - cacheVentas.t < CACHE_VENTAS_MS) return { data: cacheVentas.data };
+  if (cacheVentas.promesa) return cacheVentas.promesa;
+  cacheVentas.promesa = supabase
     .from('ventas_mercadolibre')
     .select('*')
-    .order('created_at', { ascending: false });
+    .or(`shipping_status.is.null,shipping_status.not.in.(${ESTADOS_FINALES.join(',')})`)
+    .order('created_at', { ascending: false })
+    .then(({ data, error }) => {
+      if (!error) cacheVentas = { t: Date.now(), data, promesa: null };
+      else cacheVentas.promesa = null;
+      return { data, error };
+    });
+  return cacheVentas.promesa;
+}
+
+app.get('/api/ventas-ml', async (req, res) => {
+  const { data, error } = await ventasNoFinales();
   if (error) return handleSupabaseError(res, error);
   const pendientes = data.filter((v) => clasificarVenta(v.shipping_status, v.shipping_substatus) === 'pendiente');
   res.json(pendientes);
@@ -392,7 +412,7 @@ app.get('/api/envios-en-transito', async (req, res) => {
 
   const [despachoRes, ventasRes] = await Promise.all([
     despachoQuery,
-    supabase.from('ventas_mercadolibre').select('*'),
+    ventasNoFinales(),
   ]);
   if (despachoRes.error) return handleSupabaseError(res, despachoRes.error);
   if (ventasRes.error) return handleSupabaseError(res, ventasRes.error);
